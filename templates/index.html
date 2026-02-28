@@ -34,15 +34,9 @@
       <div class="card google-card chat-card" id="chatCard" data-openai-configured="{{ openai_configured|yesno:'1,0' }}">
         <div class="status-flags" id="statusFlags"></div>
         <h2>Flood Assistant</h2>
-        <div class="language-row">
-          <label for="languageSelect">Language</label>
-          <select id="languageSelect">
-            <option value="en">English</option>
-            <option value="ilo">Ilonggo (Hiligaynon)</option>
-            <option value="tl">Tagalog</option>
-            <option value="ceb">Cebuano</option>
-          </select>
-        </div>
+        <p class="chat-hint">
+          You can chat in English, Tagalog, Cebuano, or Ilonggo (default English).
+        </p>
         <div class="chat-suggestions" id="chatSuggestions">
           <button type="button" class="chat-suggestion" data-message="check risk">
             Check flood risk

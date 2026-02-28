@@ -481,47 +481,47 @@ def _build_fallback_chat_reply(message: str, language: str) -> str:
 
 def _build_openai_reply(
     message: str,
-    language: str,
     lat: float,
     lng: float,
     chat_history: list[dict[str, str]] | None = None,
+    tool_results: dict[str, Any] | None = None,
 ) -> str | None:
     api_key = str(getattr(settings, "OPENAI_API_KEY", "")).strip()
     if not api_key or api_key == "your_key_here":
         return None
 
     history = _normalize_chat_history(chat_history)
-
-    if language == "tl":
-        persona = (
-            "You are BahaWatch, a flood-support assistant. Speak in conversational Tagalog."
-            " Ask follow-up questions when location-specific details are missing."
-        )
-    elif language == "ilo":
-        persona = (
-            "You are BahaWatch, a flood-support assistant. Speak in conversational Hiligaynon."
-            " Ask follow-up questions when location-specific details are missing."
-        )
-    elif language == "ceb":
-        persona = (
-            "You are BahaWatch, a flood-support assistant. Speak in conversational Cebuano."
-            " Ask follow-up questions when location-specific details are missing."
+    if tool_results:
+        tool_context = ""
+        try:
+            tool_context = json.dumps(tool_results, ensure_ascii=False, default=str)
+        except TypeError:
+            tool_context = str(tool_results)
+        user_prompt = (
+            f"User asked: {message}\n"
+            f"Current selected location: {lat:.6f}, {lng:.6f}.\n\n"
+            "Use only the tool outputs below. Do not invent flood numbers, center distances, or route metrics.\n"
+            f"{tool_context}\n\n"
+            "Answer in a natural conversational tone."
         )
     else:
-        persona = (
-            "You are BahaWatch, a concise flood-support assistant."
-            " Answer conversationally and use context from previous messages."
+        user_prompt = (
+            f"User asked: {message}. Current selected location is {lat:.6f}, {lng:.6f}. "
+            "Reply conversationally and use context from prior messages."
         )
 
     system_message = (
-        f"{persona} Current selected location is {lat:.6f}, {lng:.6f}. "
-        "You can refer to flood risk, evacuation centers, and safe route planning, but do not invent any tool results."
+        "You are BahaWatch, a flood support assistant for disaster chat support."
+        " Respond in the user's language (English, Tagalog, Cebuano, or Hiligaynon/Ilonggo)."
+        " Use chat history for context and acknowledge uncertainty when information is missing."
+        " Keep replies concise, actionable, and safe."
+        " If no tool output is provided, handle the question conversationally."
     )
 
     messages = [{"role": "system", "content": system_message}]
     for item in history:
         messages.append({"role": item["role"], "content": item["content"]})
-    messages.append({"role": "user", "content": message})
+    messages.append({"role": "user", "content": user_prompt})
 
     try:
         response = requests.post(
@@ -555,7 +555,7 @@ def run_tool_router(
     lng: float,
     dest_lat: float | None = None,
     dest_lng: float | None = None,
-    language: str | None = "en",
+    language: str | None = None,
     tool_calls: list[dict] | None = None,
     chat_history: list[dict[str, str]] | None = None,
 ) -> dict:
@@ -572,7 +572,7 @@ def run_tool_router(
 
     if not tool_calls:
         openai_reply = _build_openai_reply(
-            message=message, language=language, lat=lat, lng=lng, chat_history=chat_history
+            message=message, lat=lat, lng=lng, chat_history=chat_history
         )
         if openai_reply is None:
             openai_reply = _build_fallback_chat_reply(message, language)
@@ -631,8 +631,19 @@ def run_tool_router(
                     route_destination_name = center["name"]
                     route_is_evacuation_center = True
                 else:
+                    openai_reply = _build_openai_reply(
+                        message="No destination available for routing. Ask for evacuation center lookup or provide destination coordinates.",
+                        lat=lat,
+                        lng=lng,
+                        chat_history=chat_history,
+                    )
+                    if openai_reply is None:
+                        openai_reply = (
+                            "No destination available for routing. "
+                            "Please add destination coordinates or ask for the nearest evacuation center first."
+                        )
                     return {
-                        "reply": "No destination available for routing. Add destination coordinates or request an evacuation lookup first.",
+                        "reply": openai_reply,
                         "actions_taken": ["tool_get_safe_route"],
                         "tool_outputs": tool_outputs,
                     }
@@ -655,7 +666,10 @@ def run_tool_router(
 
     if not tool_results:
         openai_reply = _build_openai_reply(
-            message=message, language=language, lat=lat, lng=lng, chat_history=chat_history
+            message=message,
+            lat=lat,
+            lng=lng,
+            chat_history=chat_history,
         )
         if openai_reply is None:
             openai_reply = _build_fallback_chat_reply(message, language)
@@ -697,8 +711,18 @@ def run_tool_router(
             "type": "risk",
         }
 
+    openai_reply = _build_openai_reply(
+        message=message,
+        lat=lat,
+        lng=lng,
+        chat_history=chat_history,
+        tool_results=tool_results,
+    )
+    if openai_reply is None:
+        openai_reply = _build_conversational_reply(tool_results, language or "en", requested_hours)
+
     return {
-        "reply": _build_conversational_reply(tool_results, language, requested_hours),
+        "reply": openai_reply,
         "actions_taken": _plan_actions(tool_outputs),
         "tools_called": _plan_actions(tool_outputs),
         "tool_outputs": tool_outputs,

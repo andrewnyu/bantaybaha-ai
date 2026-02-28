@@ -26,7 +26,6 @@ def chat_api(request):
         dest_lng = payload.get("dest_lng")
         dest_lat = float(dest_lat) if dest_lat is not None else None
         dest_lng = float(dest_lng) if dest_lng is not None else None
-        language = payload.get("language", "en")
     except (TypeError, ValueError):
         return JsonResponse(
             {"error": "lat/lng/dest_lat/dest_lng must be numeric when provided"},
@@ -46,7 +45,6 @@ def chat_api(request):
         lng=lng,
         dest_lat=dest_lat,
         dest_lng=dest_lng,
-        language=language,
         tool_calls=tool_calls,
         chat_history=chat_history,
     )

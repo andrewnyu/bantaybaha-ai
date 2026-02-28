@@ -13,7 +13,6 @@ const chatInput = document.getElementById("chatInput");
 const chatLog = document.getElementById("chatLog");
 const chatSuggestions = document.getElementById("chatSuggestions");
 const chatSendBtn = document.getElementById("chatSendBtn");
-const languageSelect = document.getElementById("languageSelect");
 const mapNode = document.getElementById("map");
 
 const isOpenAIConfigured = chatCard?.dataset?.openaiConfigured === "1";
@@ -187,7 +186,6 @@ async function submitChat(event, messageOverride) {
     message,
     lat: selectedPoint.lat,
     lng: selectedPoint.lng,
-    language: languageSelect.value,
     chat_history: chatHistory.slice(-10),
   };
 
