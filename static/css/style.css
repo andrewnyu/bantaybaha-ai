@@ -465,6 +465,55 @@ button:disabled {
   margin-bottom: 0.65rem;
 }
 
+.weather-mode-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  width: fit-content;
+  font-size: 0.78rem;
+  border-radius: 999px;
+  padding: 0.28rem 0.58rem;
+  transition: 0.2s ease;
+}
+
+.weather-mode-chip::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.weather-mode-chip.live {
+  background: #eef4ff;
+  border: 1px solid #bfd3fb;
+  color: #174ea6;
+}
+
+.weather-mode-chip.live::before {
+  background: #1a73e8;
+}
+
+.weather-mode-chip.demo {
+  background: #e8f8f0;
+  border: 1px solid #a8ddc6;
+  color: #0f6f4b;
+}
+
+.weather-mode-chip.demo::before {
+  background: #16a978;
+}
+
+.weather-mode-chip.warn {
+  background: #fff4ce;
+  border: 1px solid #f4cd5b;
+  color: #8a5b00;
+}
+
+.weather-mode-chip.warn::before {
+  background: #ea8600;
+}
+
 .status-flag {
   border: 1px solid #f2c94c;
   border-radius: 999px;

@@ -1,6 +1,5 @@
 import math
 import pickle
-from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
 
@@ -13,6 +12,34 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 RIVER_GRAPH_PATH = BASE_DIR / "data" / "negros_river_graph.gpickle"
 FLOW_SPEED_MPS = 1.0
 DECAY_DISTANCE_M = 20_000
+NEAR_BAND_MAX_RATIO = 0.35
+MIDDLE_BAND_MAX_RATIO = 0.70
+
+UPSTREAM_ZONE_WEIGHTS = {
+    "near": 0.80,
+    "middle": 1.20,
+    "end": 1.50,
+}
+
+
+def _normalize_distance_ratio(distance_m: float, max_distance_m: float) -> float:
+    if max_distance_m <= 0:
+        return 0.0
+    return max(0.0, min(1.0, distance_m / max_distance_m))
+
+
+def _upstream_distance_band(distance_m: float, max_distance_m: float) -> str:
+    ratio = _normalize_distance_ratio(distance_m, max_distance_m)
+    if ratio < NEAR_BAND_MAX_RATIO:
+        return "near"
+    if ratio <= MIDDLE_BAND_MAX_RATIO:
+        return "middle"
+    return "end"
+
+
+def _upstream_zone_weight(distance_m: float, max_distance_m: float) -> float:
+    return UPSTREAM_ZONE_WEIGHTS[_upstream_distance_band(distance_m, max_distance_m)]
+
 
 def clamp(value: float, min_value: float, max_value: float) -> float:
     return max(min_value, min(max_value, value))
@@ -81,6 +108,11 @@ def compute_upstream_rain_index(
             "upstream_nodes_used": 0,
             "max_upstream_distance_m": 0.0,
             "dominant_upstream_points": [],
+            "upstream_zone_summary": {
+                "near": 0,
+                "middle": 0,
+                "end": 0,
+            },
             "expected_peak_in_hours": None,
             "max_distance_m": _travel_distance_to_max(horizon_hours),
         }
@@ -93,6 +125,11 @@ def compute_upstream_rain_index(
             "upstream_nodes_used": 0,
             "max_upstream_distance_m": 0.0,
             "dominant_upstream_points": [],
+            "upstream_zone_summary": {
+                "near": 0,
+                "middle": 0,
+                "end": 0,
+            },
             "expected_peak_in_hours": None,
             "max_distance_m": _travel_distance_to_max(horizon_hours),
         }
@@ -105,6 +142,7 @@ def compute_upstream_rain_index(
 
     total_weighted = 0.0
     dominant_payload = []
+    upstream_zone_summary = {"near": 0, "middle": 0, "end": 0}
 
     for node_id, distance_m in upstream_nodes.items():
         node_attrs = river_graph.nodes[node_id]
@@ -125,9 +163,12 @@ def compute_upstream_rain_index(
             demo_rainfall=node_demo_rainfall,
         )
         distance = float(distance_m)
+        distance_band = _upstream_distance_band(distance, max_distance_m)
         weight = math.exp(-distance / DECAY_DISTANCE_M)
-        weighted_signal = rain_total * weight
+        zone_weight = _upstream_zone_weight(distance, max_distance_m)
+        weighted_signal = rain_total * weight * zone_weight
         total_weighted += weighted_signal
+        upstream_zone_summary[distance_band] += 1
 
         dominant_payload.append(
             {
@@ -136,6 +177,7 @@ def compute_upstream_rain_index(
                 "distance_m": round(distance, 1),
                 "rain_sum": rain_total,
                 "weighted_signal": round(weighted_signal, 3),
+                "distance_band": distance_band,
                 "node_id": str(node_id),
                 "has_demo_override": node_key in upstream_rain_override,
             }
@@ -161,6 +203,7 @@ def compute_upstream_rain_index(
         "upstream_rain_index_norm": round(upstream_rain_index_norm, 3),
         "upstream_nodes_used": upstream_nodes_used,
         "max_upstream_distance_m": round(max_upstream_distance, 1),
+        "upstream_zone_summary": upstream_zone_summary,
         "dominant_upstream_points": top_points,
         "expected_peak_in_hours": expected_peak_in_hours,
         "max_distance_m": round(max_distance_m, 1),

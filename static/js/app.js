@@ -26,6 +26,7 @@ const demoUpstreamWeatherInput = document.getElementById("demoUpstreamWeatherInp
 const generateUpstreamNodesBtn = document.getElementById("generateUpstreamNodesBtn");
 const clearDemoRainfallBtn = document.getElementById("clearDemoRainfallBtn");
 const weatherSourceStatus = document.getElementById("weatherSourceStatus");
+const weatherModeIndicator = document.getElementById("weatherModeIndicator");
 const tabLinks = document.querySelectorAll(".tab-link");
 const tabPanels = document.querySelectorAll("[data-tab-panel]");
 
@@ -221,6 +222,31 @@ const formatRainfallPreview = (values) => {
   return values.join(", ");
 };
 
+const setWeatherModeIndicator = (mode, label) => {
+  if (!weatherModeIndicator) {
+    return;
+  }
+
+  const states = {
+    live: {
+      className: "live",
+      label: "Live OpenWeather forecast",
+    },
+    demo: {
+      className: "demo",
+      label: "Demo scenario active",
+    },
+    invalid: {
+      className: "warn",
+      label: "Demo mode: invalid rainfall input",
+    },
+  };
+
+  const current = states[mode] || states.live;
+  weatherModeIndicator.className = `weather-mode-chip ${current.className}`;
+  weatherModeIndicator.textContent = label || current.label;
+};
+
 const parseDemoHours = (value, fallback = 3) => {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed)) {
@@ -266,6 +292,7 @@ const updateDemoContextText = () => {
 const syncWeatherSettingsUI = () => {
   const clampedHours = parseDemoHours(weatherSettings.forecastHours, 3);
   weatherSettings.forecastHours = clampedHours;
+  let demoModeValid = false;
 
   if (demoWeatherToggle) {
     demoWeatherToggle.checked = Boolean(weatherSettings.demoModeEnabled);
@@ -296,18 +323,27 @@ const syncWeatherSettingsUI = () => {
   if (weatherSettings.demoModeEnabled) {
     try {
       const parsed = parseDemoRainfallValues(weatherSettings.demoRainfall);
+      demoModeValid = true;
       if (weatherSourceStatus) {
         weatherSourceStatus.textContent = `Current source: DEMO (${formatRainfallPreview(parsed)}) for ${clampedHours}h`;
       }
     } catch (error) {
+      demoModeValid = false;
       if (weatherSourceStatus) {
         weatherSourceStatus.textContent = `Current source: DEMO (${clampedHours}h, invalid input).`;
       }
     }
+    if (demoModeValid) {
+      setWeatherModeIndicator("demo");
+    } else {
+      setWeatherModeIndicator("invalid");
+    }
   } else {
+    demoModeValid = true;
     if (weatherSourceStatus) {
       weatherSourceStatus.textContent = "Current source: live OpenWeather forecast";
     }
+    setWeatherModeIndicator("live");
   }
 
   updateDemoContextText();
@@ -597,6 +633,8 @@ const switchTab = (selectedTab) => {
     const isPanelActive = panel.getAttribute("data-tab-panel") === selectedTab;
     panel.classList.toggle("active", isPanelActive);
   });
+
+  syncWeatherSettingsUI();
 };
 
 loadWeatherSettings();

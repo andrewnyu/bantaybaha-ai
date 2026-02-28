@@ -50,6 +50,9 @@
         <div class="card google-card chat-card" id="chatCard" data-openai-configured="{{ openai_configured|yesno:'1,0' }}">
           <div class="status-flags" id="statusFlags"></div>
           <h2>Flood Assistant</h2>
+          <div id="weatherModeIndicator" class="weather-mode-chip live" role="status" aria-live="polite">
+            Live OpenWeather forecast
+          </div>
           <p class="chat-hint">
             You can chat in English, Tagalog, Cebuano, or Ilonggo (default English).
           </p>
