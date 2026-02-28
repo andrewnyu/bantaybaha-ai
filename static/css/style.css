@@ -562,7 +562,7 @@ button:disabled {
 .chat-risk-ruler {
   margin-top: 0.42rem;
   display: flex;
-  align-items: flex-end;
+  align-items: stretch;
   gap: 0.5rem;
 }
 
@@ -597,9 +597,15 @@ button:disabled {
 }
 
 .chat-risk-ruler-person {
-  font-size: 1.2rem;
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 1.6rem;
+  height: 84px;
+  font-size: 4rem;
   line-height: 1;
-  transform: translateY(2px);
+  transform: scaleY(1.08);
+  transform-origin: bottom center;
 }
 
 .chat-risk-ruler-mark {
