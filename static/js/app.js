@@ -22,10 +22,22 @@ let map = null;
 let mapEnabled = false;
 let selectedPoint = { ...DEFAULT_COORD };
 let selectedMarker = null;
-let riskCircle = null;
 let routeLine = null;
+let routeDestinationMarker = null;
+let riskCircle = null;
 
 const shownWarnings = new Set();
+
+const centerMarkerIcon =
+  typeof L !== "undefined"
+    ? L.divIcon({
+        className: "evac-center-icon",
+        html: '<div class="evac-center-icon-inner">🏥</div>',
+        iconSize: [28, 28],
+        iconAnchor: [14, 28],
+        popupAnchor: [0, -30],
+      })
+    : null;
 
 const pointRiskColor = (levelOrScore) => {
   if (typeof levelOrScore === "number") {
@@ -194,7 +206,7 @@ async function submitChat(event, messageOverride) {
 
     if (data.map_payload && mapEnabled) {
       if (data.map_payload.type === "route" && data.map_payload.route) {
-        renderChatRoute(data.map_payload.route);
+        renderChatRoute(data.map_payload);
       } else if (data.map_payload.type === "risk") {
         renderRiskMarker(data.map_payload);
       }
@@ -235,7 +247,7 @@ function renderChatRoute(route) {
     return;
   }
 
-  if (!Array.isArray(route) || route.length === 0) {
+  if (!route || !Array.isArray(route.route) || route.route.length === 0) {
     return;
   }
 
@@ -243,11 +255,26 @@ function renderChatRoute(route) {
     map.removeLayer(routeLine);
   }
 
-  const latlngs = route.map((point) => [point.lat, point.lng]);
+  if (routeDestinationMarker) {
+    map.removeLayer(routeDestinationMarker);
+    routeDestinationMarker = null;
+  }
+
+  const latlngs = route.route.map((point) => [point.lat, point.lng]);
   routeLine = L.polyline(latlngs, {
     color: "#1d6fa3",
     weight: 5,
   }).addTo(map);
+
+  const destination = latlngs[latlngs.length - 1];
+  if (route.is_evacuation_center && centerMarkerIcon && destination) {
+    const label = route.destination_name || "Evacuation center";
+    routeDestinationMarker = L.marker(destination, {
+      icon: centerMarkerIcon,
+    }).addTo(map);
+    routeDestinationMarker.bindPopup(`<strong>${label}</strong>`);
+  }
+
   map.fitBounds(routeLine.getBounds(), { padding: [30, 30] });
 }
 

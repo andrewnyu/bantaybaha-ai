@@ -296,6 +296,25 @@ button:disabled {
   border-bottom-left-radius: 4px;
 }
 
+.evac-center-icon {
+  background: transparent;
+  border: none;
+}
+
+.evac-center-icon-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #1e88e5;
+  border: 2px solid #0d47a1;
+  color: #ffffff;
+  font-size: 15px;
+  box-shadow: 0 2px 5px rgba(13, 71, 161, 0.35);
+}
+
 .chat-meta {
   color: #8d949b;
   font-size: 0.75rem;

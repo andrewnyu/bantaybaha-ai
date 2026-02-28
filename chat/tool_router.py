@@ -367,6 +367,8 @@ def run_tool_router(
     tool_results: dict[str, Any] = {}
 
     evac_centers = []
+    route_destination_name = None
+    route_is_evacuation_center = False
 
     for tool_call in tool_calls:
         tool_name = tool_call.get("tool")
@@ -405,12 +407,16 @@ def run_tool_router(
                     center = evac_centers[0]
                     dest_lat = center["latitude"]
                     dest_lng = center["longitude"]
+                    route_destination_name = center["name"]
+                    route_is_evacuation_center = True
                 else:
                     return {
                         "reply": "No destination available for routing. Add destination coordinates or request an evacuation lookup first.",
                         "actions_taken": ["tool_get_safe_route"],
                         "tool_outputs": tool_outputs,
                     }
+            else:
+                route_is_evacuation_center = False
 
             mode = args.get("mode", "safest")
             route_payload = tool_get_safe_route(
@@ -433,6 +439,10 @@ def run_tool_router(
             "route": route.get("route", []),
             "origin_node": route.get("origin_node"),
             "destination_node": route.get("destination_node"),
+            "destination_lat": dest_lat,
+            "destination_lng": dest_lng,
+            "destination_name": route_destination_name,
+            "is_evacuation_center": route_is_evacuation_center,
             "mode": route.get("mode", "safest"),
             "type": "route",
         }
