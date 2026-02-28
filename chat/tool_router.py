@@ -29,7 +29,7 @@ def tool_get_upstream_summary(lat: float, lng: float, hours: int = 3) -> dict:
     }
 
 
-def tool_get_evac_centers(lat: float, lng: float, limit: int = 3) -> dict:
+def tool_get_evac_centers(lat: float, lng: float, limit: int | None = None) -> dict:
     payload = nearest_evacuation_centers(lat=lat, lng=lng, limit=limit)
     return {
         "tool": "tool_get_evac_centers",
@@ -187,6 +187,8 @@ def _build_conversational_reply(
             "evacuation centers, at mga ruta. Subukan ang: "
             "\"check risk\", \"find nearest evacuation center\", o \"safe route to nearest evacuation center\"."
         )
+        evac_options_label = "Available evacuation centers"
+        no_evac_message = "No evacuation centers found within 200 km."
         units_km = "km"
     elif lang == "ilo":
         risk_high_label = "Peligro"
@@ -206,6 +208,8 @@ def _build_conversational_reply(
             "Maka-check ako sang risk, upstream signals, evacuation centers, kag mga ruta. "
             "Pwede mo i-sabi: \"check risk\", \"find nearest evacuation center\", o \"safe route to nearest evacuation center\"."
         )
+        evac_options_label = "Mga duol nga evacuation center"
+        no_evac_message = "Wala sang evacuation center sa sulod sang 200 km."
         units_km = "km"
     elif lang == "ceb":
         risk_high_label = "Peligro sa baha"
@@ -225,6 +229,8 @@ def _build_conversational_reply(
             'Makatabang ko pag-check ug risk sa baha, upstream signals, evacuation centers, ug ruta. '
             'Sulayi: "check risk", "find nearest evacuation center", o "safe route to nearest evacuation center".'
         )
+        evac_options_label = "Mga duol nga evacuation center"
+        no_evac_message = "Walay evacuation center sa sulod sa 200 km."
         units_km = "km"
     else:
         risk_high_label = "Flood risk is"
@@ -244,6 +250,8 @@ def _build_conversational_reply(
             "I can check flood risk, upstream signals, evacuation centers, and route options. "
             'Try: "check risk", "find nearest evacuation center", or "safe route to nearest evacuation center".'
         )
+        evac_options_label = "Evacuation centers nearby"
+        no_evac_message = "No evacuation centers found within 200 km."
         units_km = "km"
 
     if not tool_results:
@@ -305,11 +313,22 @@ def _build_conversational_reply(
         )
 
     if "evac" in tool_results:
-        if tool_results["evac"]:
-            first = tool_results["evac"][0]
+        centers = tool_results["evac"]
+        if centers:
+            first = centers[0]
             parts.append(
                 f"{evac_label}: {first['name']} is {first['distance_km']} {units_km} away."
             )
+            if len(centers) > 1:
+                options = ", ".join(
+                    f"{center['name']} ({center['distance_km']} {units_km})"
+                    for center in centers
+                )
+                parts.append(
+                    f"{evac_options_label}: {options}"
+                )
+        else:
+            parts.append(no_evac_message)
 
     if "route" in tool_results:
         route = tool_results["route"]
@@ -370,7 +389,8 @@ def run_tool_router(
             tool_results["upstream"] = tool_output["result"]
 
         elif tool_name == "tool_get_evac_centers":
-            limit = int(args.get("limit", 3))
+            raw_limit = args.get("limit")
+            limit = int(raw_limit) if raw_limit is not None else None
             tool_output = tool_get_evac_centers(lat=lat, lng=lng, limit=limit)
             evac_centers = tool_output["result"]
             tool_outputs.append(tool_output)
