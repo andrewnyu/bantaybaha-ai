@@ -113,15 +113,71 @@ def _normalize_language(language: str | None) -> str:
     return language if language in {"en", "tl", "ilo"} else "en"
 
 
-def _build_conversational_reply(tool_results: dict[str, Any], language: str) -> str:
+def _extract_number(pattern: str, text: str) -> float | None:
+    match = re.search(pattern, text)
+    if not match:
+        return None
+
+    value = match.group(1)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _risk_context_from_payload(risk_payload: dict[str, Any]) -> dict[str, Any]:
+    explanations = [str(item) for item in risk_payload.get("explanation", [])]
+    window_hours = 3
+    rain_mm = 0.0
+    upstream_mm = 0.0
+    has_upstream_signal = False
+    for line in explanations:
+        if window_match := re.search(r"Rainfall next (\d+)h", line):
+            try:
+                window_hours = int(window_match.group(1))
+            except (TypeError, ValueError):
+                window_hours = 3
+
+        if "Rainfall next" in line:
+            value = _extract_number(r"Rainfall next \d+h: ([0-9]+(?:\.[0-9]+)?)", line)
+            if value is not None:
+                rain_mm = value
+
+        if "Upstream risk index" in line:
+            value = _extract_number(
+                r"Upstream risk index: ([0-9]+(?:\.[0-9]+)?)", line
+            )
+            if value is not None:
+                upstream_mm = value
+
+        if "Heavy rainfall detected upstream" in line:
+            has_upstream_signal = True
+            _ = _extract_number(r"downstream in ~([0-9]+(?:\.[0-9]+)?)", line)
+
+    return {
+        "window_hours": window_hours,
+        "rain_mm": rain_mm,
+        "upstream_mm": upstream_mm,
+        "has_upstream_signal": has_upstream_signal,
+        "explanations": explanations,
+    }
+
+
+def _build_conversational_reply(
+    tool_results: dict[str, Any], language: str, forecast_hours: int = 3
+) -> str:
     lang = _normalize_language(language)
 
     if lang == "tl":
-        risk_label = "Panganib"
-        upstream_label = "Bagay sa tubig-ulan sa itaas na bahagi"
+        risk_high_label = "Panganib ng baha"
+        low_risk_intro = (
+            f"Walang natukoy na malaking rainfall o upstream impact para sa susunod na {forecast_hours} oras. "
+            f"Sa ngayon, mukhang mababa ang panganib."
+        )
+        upstream_label = "Bagay sa itaas na bahagi"
         evac_label = "Pinakamalapit na evacuation center"
         route_label = "Ruta"
-        no_data = "Naka-assemble ako ng sagot, pero mukhang kulang ang data para sa query na ito."
+        no_data = "Wala pang sapat na data para bigyan ka ng malinaw na sagot."
         default_action = (
             "Maaari kong kunin ang risk, upstream rainfall signals, "
             "evacuation centers, at mga ruta. Subukan ang: "
@@ -129,19 +185,27 @@ def _build_conversational_reply(tool_results: dict[str, Any], language: str) -> 
         )
         units_km = "km"
     elif lang == "ilo":
-        risk_label = "Peligro"
+        risk_high_label = "Peligro"
+        low_risk_intro = (
+            f"Wala sang signal sang ulan ukon upstream impact para sa sunod nga {forecast_hours} oras. "
+            f"Sa subong, nahanap naton nga hilum."
+        )
         upstream_label = "Pagsulod sang ulan sa pinutikan"
         evac_label = "Pinakadaku nga evacuation center nga duul"
         route_label = "Ruta"
-        no_data = "Nakuha ko ang resulta pero daw kulang ang data para sa imo pangabay."
+        no_data = "Wala pa gid sang igo nga data para magbalos sang sabat."
         default_action = (
             "Maka-check ako sang risk, upstream signals, evacuation centers, kag mga ruta. "
             "Pwede mo i-sabi: \"check risk\", \"find nearest evacuation center\", o \"safe route to nearest evacuation center\"."
         )
         units_km = "km"
     else:
-        risk_label = "Flood risk"
-        upstream_label = "Upstream rainfall signal"
+        risk_high_label = "Flood risk is"
+        low_risk_intro = (
+            f"I don't see rainfall or upstream impact for the next {forecast_hours} hours. "
+            "So there is currently no immediate flood risk signal."
+        )
+        upstream_label = "Upstream signal"
         evac_label = "Nearest evacuation center"
         route_label = "Route"
         no_data = "I did everything I can, but this query did not return enough data."
@@ -154,21 +218,57 @@ def _build_conversational_reply(tool_results: dict[str, Any], language: str) -> 
     if not tool_results:
         return default_action
 
-    lines = []
+    parts = []
     if "risk" in tool_results:
         risk_payload = tool_results["risk"]
-        lines.append(
-            f"{risk_label}: {risk_payload['risk_level']} ({risk_payload['risk_score']}/100)"
+        risk_score = int(risk_payload.get("risk_score", 0))
+        risk_level = risk_payload.get("risk_level", "UNKNOWN")
+        risk_context = _risk_context_from_payload(risk_payload)
+        window_hours = risk_context["window_hours"] or forecast_hours
+        no_rainfall_impact = (
+            risk_score <= 35
+            and risk_context["rain_mm"] <= 0.0
+            and risk_context["upstream_mm"] <= 0.0
+            and not risk_context["has_upstream_signal"]
         )
+
+        if no_rainfall_impact:
+            parts.append(
+                f"{low_risk_intro} "
+                f"Score: {risk_score}/100 ({risk_level})."
+            )
+        else:
+            if risk_score >= 65:
+                parts.append(
+                    f"{risk_high_label} HIGH ({risk_score}/100) for the next {window_hours} hours. "
+                    "Please prepare and consider moving to safer ground."
+                )
+            elif risk_score >= 35:
+                parts.append(
+                    f"{risk_high_label} MEDIUM ({risk_score}/100) for the next {window_hours} hours. "
+                    "Keep an eye on updates and avoid low-lying roads."
+                )
+            else:
+                parts.append(
+                    f"{risk_high_label} LOW ({risk_score}/100) for the next {window_hours} hours."
+                )
+
         explanations = risk_payload.get("explanation")
         if explanations:
-            lines.append("Signals: " + ", ".join(explanations))
+            summary = []
+            for item in explanations:
+                if "Rainfall next" in item or "Distance to nearest river" in item:
+                    summary.append(item)
+                elif "Upstream risk index" in item:
+                    summary.append(item)
+            if summary:
+                parts.append("What I checked: " + "; ".join(summary))
 
     if "upstream" in tool_results:
         up = tool_results["upstream"]
         peak = up.get("expected_peak_in_hours")
         peak_text = f"~{peak}h" if peak is not None else "n/a"
-        lines.append(
+        parts.append(
             f"{upstream_label}: {up['upstream_rain_index']} (normalized {up['upstream_rain_index_norm']}), "
             f"possible impact in {peak_text}."
         )
@@ -176,21 +276,21 @@ def _build_conversational_reply(tool_results: dict[str, Any], language: str) -> 
     if "evac" in tool_results:
         if tool_results["evac"]:
             first = tool_results["evac"][0]
-            lines.append(
-                f"{evac_label}: {first['name']} - {first['distance_km']} {units_km} away."
+            parts.append(
+                f"{evac_label}: {first['name']} is {first['distance_km']} {units_km} away."
             )
 
     if "route" in tool_results:
         route = tool_results["route"]
-        lines.append(
-            f"{route_label}: {route['total_distance']} {units_km}, "
-            f"hazard exposure {route['hazard_exposure']}."
+        parts.append(
+            f"{route_label} suggestion: about {route['total_distance']} {units_km}, "
+            f"hazard exposure {route['hazard_exposure']} (mode: {route.get('mode', 'safest')})."
         )
 
-    if not lines:
+    if not parts:
         return no_data
 
-    return " ".join(lines)
+    return " ".join(parts)
 
 
 def run_tool_router(
@@ -296,7 +396,7 @@ def run_tool_router(
         }
 
     return {
-        "reply": _build_conversational_reply(tool_results, language),
+        "reply": _build_conversational_reply(tool_results, language, requested_hours),
         "actions_taken": _plan_actions(tool_outputs),
         "tools_called": _plan_actions(tool_outputs),
         "tool_outputs": tool_outputs,
