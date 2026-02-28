@@ -1,79 +1,86 @@
-import json
 from functools import lru_cache
 from pathlib import Path
 
 import networkx as nx
+import osmnx as ox
 
-from core.geo import haversine_km
-from risk.risk_engine import historical_flood_factor, river_proximity_factor
-from risk.risk_engine import distance_to_nearest_river_km
+from risk.risk_engine import (
+    distance_to_nearest_river_km,
+    get_elevation_meters,
+    get_forecast_rainfall_mm,
+)
 
-DATA_DIR = Path(__file__).resolve().parent / "data"
+NEGROS_GRAPH_PATH = Path(__file__).resolve().parents[1] / "data" / "negros_graph.graphml"
+SAFETY_HUB_RADIUS_METERS = 5000
+DEFAULT_SAFETY_WEIGHT = 2.0
 
 
 def clamp(value: float, min_value: float, max_value: float) -> float:
     return max(min_value, min(max_value, value))
 
 
-@lru_cache(maxsize=1)
-def load_graph_payload() -> dict:
-    graph_path = DATA_DIR / "road_graph.json"
-    return json.loads(graph_path.read_text())
-
-
-@lru_cache(maxsize=1)
-def build_graph() -> nx.Graph:
-    payload = load_graph_payload()
-    graph = nx.Graph()
-
-    for node_id, node_data in payload["nodes"].items():
-        graph.add_node(node_id, lat=node_data["lat"], lng=node_data["lng"])
-
-    for edge in payload["edges"]:
-        start = edge["from"]
-        end = edge["to"]
-
-        start_node = payload["nodes"][start]
-        end_node = payload["nodes"][end]
-
-        distance = edge.get(
-            "distance",
-            haversine_km(
-                start_node["lat"],
-                start_node["lng"],
-                end_node["lat"],
-                end_node["lng"],
-            ),
+def _load_negros_graph() -> nx.MultiDiGraph:
+    if not NEGROS_GRAPH_PATH.exists():
+        raise FileNotFoundError(
+            "Negros road graph missing. Run scripts/load_negros_roads.py first."
         )
 
-        hazard = edge.get("hazard_score")
-        if hazard is None:
-            midpoint_lat = (start_node["lat"] + end_node["lat"]) / 2
-            midpoint_lng = (start_node["lng"] + end_node["lng"]) / 2
-            historical_factor, _ = historical_flood_factor(midpoint_lat, midpoint_lng)
-            river_factor = river_proximity_factor(
-                distance_to_nearest_river_km(midpoint_lat, midpoint_lng)
-            )
-            hazard = clamp((historical_factor * 0.6) + (river_factor * 0.4), 0.0, 100.0)
-
-        graph.add_edge(start, end, distance=float(distance), hazard_score=float(hazard))
-
-    return graph
+    return ox.load_graphml(NEGROS_GRAPH_PATH)
 
 
-def nearest_node_id(graph: nx.Graph, lat: float, lng: float) -> str:
-    nearest = None
-    nearest_distance = float("inf")
+@lru_cache(maxsize=1)
+def load_graph() -> nx.MultiDiGraph:
+    return _load_negros_graph()
 
-    for node_id, attrs in graph.nodes(data=True):
-        km = haversine_km(lat, lng, attrs["lat"], attrs["lng"])
-        if km < nearest_distance:
-            nearest = node_id
-            nearest_distance = km
 
-    if nearest is None:
-        raise ValueError("Graph has no nodes")
-    return nearest
+def nearest_node_id(graph: nx.Graph, lat: float, lng: float) -> int:
+    nearest = ox.distance.nearest_nodes(graph, lng, lat)
+    return int(nearest)
+
+
+def extract_local_graph(graph: nx.MultiDiGraph, origin: int, destination: int) -> nx.MultiDiGraph:
+    base = nx.ego_graph(graph.to_undirected(), origin, radius=SAFETY_HUB_RADIUS_METERS, distance="length")
+    if destination not in base:
+        around_destination = nx.ego_graph(
+            graph.to_undirected(),
+            destination,
+            radius=SAFETY_HUB_RADIUS_METERS,
+            distance="length",
+        )
+        base = nx.compose(base, around_destination)
+
+    if destination not in base:
+        return graph.to_undirected()
+
+    return graph.subgraph(base.nodes).copy()
+
+
+def add_edge_hazard_scores(graph: nx.MultiDiGraph, rainfall_next_3h: float) -> None:
+    for u, v, key, data in graph.edges(keys=True, data=True):
+        if data.get("hazard_score") is not None:
+            continue
+
+        u_data = graph.nodes[u]
+        v_data = graph.nodes[v]
+        ux, uy = u_data.get("x", 0.0), u_data.get("y", 0.0)
+        vx, vy = v_data.get("x", 0.0), v_data.get("y", 0.0)
+
+        midpoint_lng = (ux + vx) / 2
+        midpoint_lat = (uy + vy) / 2
+
+        hazard = 0.0
+        elevation = get_elevation_meters(midpoint_lat, midpoint_lng, allow_remote_lookup=False)
+        if elevation < 20:
+            hazard += 2
+
+        distance_to_river_km = distance_to_nearest_river_km(midpoint_lat, midpoint_lng)
+        if distance_to_river_km <= 0.1:
+            hazard += 2
+
+        if rainfall_next_3h > 30:
+            hazard += 1
+
+        data["hazard_score"] = float(clamp(hazard, 0.0, 100.0))
 
 
 def compute_safe_route(
@@ -81,34 +88,54 @@ def compute_safe_route(
     origin_lng: float,
     dest_lat: float,
     dest_lng: float,
-    safety_weight: float = 2.0,
+    safety_weight: float = DEFAULT_SAFETY_WEIGHT,
 ) -> dict:
-    graph = build_graph()
-
+    graph = load_graph()
     origin_node = nearest_node_id(graph, origin_lat, origin_lng)
     dest_node = nearest_node_id(graph, dest_lat, dest_lng)
 
-    def edge_cost(start, end, attrs):
-        return attrs["distance"] + (attrs["hazard_score"] * safety_weight)
+    local_graph = extract_local_graph(graph, origin_node, dest_node)
+    rainfall_sample = get_forecast_rainfall_mm(origin_lat, origin_lng, 3)
 
-    path = nx.shortest_path(graph, source=origin_node, target=dest_node, weight=edge_cost)
+    add_edge_hazard_scores(local_graph, rainfall_sample)
+
+    def edge_cost(start, end, data):
+        base_length = float(data.get("length", 1.0))
+        hazard = float(data.get("hazard_score", 0.0))
+        return base_length + (hazard * safety_weight)
+
+    path = nx.shortest_path(
+        local_graph,
+        source=origin_node,
+        target=dest_node,
+        weight=edge_cost,
+    )
 
     route = []
     total_distance = 0.0
     hazard_exposure = 0.0
-
     for node_id in path:
+        node_attrs = local_graph.nodes[node_id]
         route.append(
             {
-                "lat": graph.nodes[node_id]["lat"],
-                "lng": graph.nodes[node_id]["lng"],
+                "lat": node_attrs.get("y"),
+                "lng": node_attrs.get("x"),
             }
         )
 
     for index in range(len(path) - 1):
-        edge_data = graph[path[index]][path[index + 1]]
-        total_distance += edge_data["distance"]
-        hazard_exposure += edge_data["hazard_score"]
+        u = path[index]
+        v = path[index + 1]
+        edge_attrs = local_graph.get_edge_data(u, v)
+
+        if len(edge_attrs) == 1:
+            attrs = list(edge_attrs.values())[0]
+        else:
+            candidate = sorted(edge_attrs.values(), key=lambda item: edge_cost(u, v, item))[0]
+            attrs = candidate
+
+        total_distance += float(attrs.get("length", 0.0))
+        hazard_exposure += float(attrs.get("hazard_score", 0.0))
 
     return {
         "route": route,

@@ -27,8 +27,8 @@ def parse_coordinate_pairs(message: str) -> list[tuple[float, float]]:
 def detect_intents(message: str) -> dict:
     lower = message.lower()
     return {
-        "risk": "risk" in lower,
-        "evac": ("evac" in lower) or ("where" in lower),
+        "risk": ("risk" in lower) or ("rain" in lower) or ("typhoon" in lower),
+        "evac": ("evac" in lower) or ("evacuate" in lower) or ("where" in lower),
         "route": ("route" in lower) or ("go" in lower),
     }
 
@@ -42,29 +42,35 @@ def run_chat_agent(message: str, context: ChatContext) -> dict:
     if len(coordinate_pairs) >= 2:
         context.dest_lat, context.dest_lng = coordinate_pairs[1]
 
-    actions_taken = []
-    replies = []
+    actions_taken: list[str] = []
+    replies: list[str] = []
+    nearest_centers = []
 
-    if intents["risk"]:
+    if intents["risk"] or intents["evac"]:
         risk_payload = estimate_flood_risk(context.lat, context.lng, hours=3)
         actions_taken.append("risk_check")
         replies.append(
-            f"Estimated flood risk is {risk_payload['risk_level']} ({risk_payload['risk_score']}/100)."
+            "Flood risk: "
+            f"{risk_payload['risk_level']} ({risk_payload['risk_score']}/100). "
+            f"Why: {'; '.join(risk_payload['explanation'])}."
         )
 
-    nearest_centers = []
     if intents["evac"]:
         nearest_centers = nearest_evacuation_centers(context.lat, context.lng, limit=3)
         actions_taken.append("evac_lookup")
         if nearest_centers:
-            summary = ", ".join(
-                [f"{item['name']} ({item['distance_km']} km)" for item in nearest_centers]
+            top = nearest_centers[0]
+            replies.append(
+                "Suggested center: "
+                f"{top['name']} (~{top['distance_km']} km, capacity {top['capacity']})."
             )
-            replies.append(f"Nearest evacuation centers: {summary}.")
         else:
-            replies.append("No evacuation centers available yet.")
+            replies.append("No evacuation center loaded yet.")
 
-    if intents["route"]:
+    if intents["route"] or "evacuate" in message.lower():
+        if not nearest_centers and not intents["evac"]:
+            nearest_centers = nearest_evacuation_centers(context.lat, context.lng, limit=1)
+
         if nearest_centers:
             context.dest_lat = nearest_centers[0]["latitude"]
             context.dest_lng = nearest_centers[0]["longitude"]
@@ -76,17 +82,24 @@ def run_chat_agent(message: str, context: ChatContext) -> dict:
             dest_lng=context.dest_lng,
             safety_weight=2.0,
         )
+
         actions_taken.append("safe_route")
-        replies.append(
-            "Suggested safer route is "
-            f"{route_payload['total_distance']} km with "
-            f"hazard exposure {route_payload['hazard_exposure']}."
-        )
+        if nearest_centers:
+            replies.append(
+                "Safe route: "
+                f"{route_payload['total_distance']} km, hazard exposure "
+                f"{route_payload['hazard_exposure']} to {nearest_centers[0]['name']}."
+            )
+        else:
+            replies.append(
+                "Safe route computed for the provided destination coordinates "
+                f"({route_payload['total_distance']} km)."
+            )
 
     if not actions_taken:
         replies.append(
             "I can check flood risk, find nearby evacuation centers, or compute a safer route. "
-            "Try including 'risk', 'evac', or 'route' in your message."
+            "Try words like risk, rain, evacuate, or route."
         )
 
     return {
