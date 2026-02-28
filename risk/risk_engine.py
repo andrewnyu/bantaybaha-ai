@@ -2,8 +2,6 @@ import math
 from functools import lru_cache
 from pathlib import Path
 
-from django.conf import settings
-
 from core.geo import haversine_km
 from weather.client import get_hourly_rain_sum
 from risk.upstream import compute_upstream_rain_index
@@ -13,11 +11,14 @@ from shapely.geometry import Point, shape
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RISK_DATA_DIR = Path(__file__).resolve().parent / "data"
 NEGROS_DATA_DIR = PROJECT_ROOT / "data"
+PROJECT_DATA_DIR = PROJECT_ROOT / "data"
 RISK_POLYGON_FALLBACK = RISK_DATA_DIR / "flood_zones.geojson"
 NEGROS_RIVERS_PATH = NEGROS_DATA_DIR / "negros_rivers.geojson"
+RIVER_SAMPLE_POINTS_PATH = PROJECT_DATA_DIR / "river_sample_points.json"
 NEGROS_DEM_PATH = NEGROS_DATA_DIR / "negros_dem.tif"
 OPEN_ELEVATION_URL = "https://api.open-elevation.com/api/v1/lookup"
 OPEN_ELEVATION_TIMEOUT_SECONDS = 5
+RIVER_METRIC_CRS = "EPSG:3857"
 
 
 def clamp(value: float, min_value: float, max_value: float) -> float:
@@ -40,13 +41,12 @@ def load_flood_zone_polygons() -> list:
     return [shape(feature["geometry"]) for feature in features]
 
 
-def _river_union_geometry() -> object | None:
+def _load_geojson_union_as_metric_geometry():
     if not NEGROS_RIVERS_PATH.exists():
         return None
 
     try:
         import geopandas as gpd
-
         gdf = gpd.read_file(str(NEGROS_RIVERS_PATH))
         if gdf.empty:
             return None
@@ -55,27 +55,35 @@ def _river_union_geometry() -> object | None:
         if gdf.empty:
             return None
 
-        return gdf.geometry.unary_union
+        if gdf.crs is None:
+            gdf = gdf.set_crs("EPSG:4326", allow_override=True)
+        return gdf.to_crs(RIVER_METRIC_CRS).geometry.unary_union
     except Exception:
         return None
 
 
 @lru_cache(maxsize=1)
 def load_river_union() -> object | None:
-    union = _river_union_geometry()
+    union = _load_geojson_union_as_metric_geometry()
     if union is None:
         return None
     return union
 
 
 def _load_river_points_fallback() -> list[tuple[float, float]]:
-    points_path = RISK_DATA_DIR / "river_points.json"
-    if not points_path.exists():
-        return []
+    candidate_paths = [RIVER_SAMPLE_POINTS_PATH, RISK_DATA_DIR / "river_points.json"]
     import json
 
-    payload = json.loads(points_path.read_text())
-    return [(item["lat"], item["lng"]) for item in payload.get("points", [])]
+    for points_path in candidate_paths:
+        if not points_path.exists():
+            continue
+        payload = json.loads(points_path.read_text())
+        points = payload.get("points", [])
+        if not points:
+            continue
+        return [(item.get("lat"), item.get("lng")) for item in points if item.get("lat") is not None and item.get("lng") is not None]
+
+    return []
 
 
 def get_forecast_rainfall_sum_mm(lat: float, lng: float, hours: int) -> float:
@@ -132,11 +140,20 @@ def elevation_factor(elevation_m: float) -> float:
 def distance_to_nearest_river_km(lat: float, lng: float) -> float:
     river_union = load_river_union()
     if river_union is not None:
-        point = Point(lng, lat)
-        return clamp(point.distance(river_union) * 111.0, 0.0, 999.0)
+        try:
+            from pyproj import Transformer
+
+            to_metric = Transformer.from_crs("EPSG:4326", RIVER_METRIC_CRS, always_xy=True)
+            metric_lng, metric_lat = to_metric.transform(lng, lat)
+            point = Point(metric_lng, metric_lat)
+            return clamp(point.distance(river_union) / 1000.0, 0.0, 999.0)
+        except Exception:
+            # Fall back to approximate distance in degrees if projection fails.
+            pass
 
     fallback_points = _load_river_points_fallback()
     if not fallback_points:
+        print("No river dataset available (Negros GeoJSON or sample points); river distance fallback returned 999 km.")
         return 999.0
 
     distances = [haversine_km(lat, lng, r_lat, r_lng) for r_lat, r_lng in fallback_points]

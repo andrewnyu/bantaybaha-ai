@@ -87,6 +87,22 @@ body {
   color: #1f1f1f;
 }
 
+.toggle-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.toggle-row label {
+  font-size: 0.86rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--ink);
+  cursor: pointer;
+}
+
 label {
   color: var(--muted);
   font-size: 0.86rem;
@@ -213,6 +229,57 @@ button:disabled {
   color: #8d949b;
   font-size: 0.75rem;
   margin-top: 0.22rem;
+}
+
+.map-legend {
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--ink);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  padding: 0.62rem;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  max-width: 190px;
+}
+
+.map-legend h4 {
+  margin: 0 0 0.35rem;
+  font-size: 0.86rem;
+}
+
+.map-legend .spacer {
+  height: 0.4rem;
+}
+
+.map-legend .swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 0.4rem;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+}
+
+.map-legend .swatch.low {
+  background: #2e7d32;
+}
+
+.map-legend .swatch.medium {
+  background: #ef6c00;
+}
+
+.map-legend .swatch.high {
+  background: #c62828;
+}
+
+.map-legend .swatch.river {
+  background: #1e88e5;
+  border-radius: 2px;
+}
+
+.map-legend .swatch.road {
+  background: #f57c00;
+  border-radius: 2px;
 }
 
 .map-note {

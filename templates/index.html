@@ -37,6 +37,22 @@
       </div>
 
       <div class="card google-card">
+        <h2>Area Risk Sweep</h2>
+        <button id="riskAreaBtn" class="action-btn">Scan Negros Flood Risk</button>
+        <div class="toggle-row">
+          <label>
+            <input id="toggleRivers" type="checkbox" checked />
+            Highlight Rivers
+          </label>
+          <label>
+            <input id="toggleFloodedRoads" type="checkbox" checked />
+            Highlight Floodable Roads
+          </label>
+        </div>
+        <div id="riskAreaOutput" class="output muted">Run a scan to see area risk overlays.</div>
+      </div>
+
+      <div class="card google-card">
         <h2>Evacuation & Routing</h2>
         <button id="evacBtn" class="action-btn">Find Nearest 3 Centers</button>
         <label for="routeMode">Route mode</label>
