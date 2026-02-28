@@ -26,6 +26,7 @@ let routeLine = null;
 let routeDestinationMarker = null;
 let evacCenterMarkers = [];
 let riskCircle = null;
+const chatHistory = [];
 
 const shownWarnings = new Set();
 
@@ -179,6 +180,7 @@ async function submitChat(event, messageOverride) {
   }
 
   appendChat("You", message);
+  chatHistory.push({ role: "user", content: message });
   chatSendBtn.disabled = true;
 
   const payload = {
@@ -186,6 +188,7 @@ async function submitChat(event, messageOverride) {
     lat: selectedPoint.lat,
     lng: selectedPoint.lng,
     language: languageSelect.value,
+    chat_history: chatHistory.slice(-10),
   };
 
   try {
@@ -203,7 +206,9 @@ async function submitChat(event, messageOverride) {
       return;
     }
 
-    appendChat("BahaWatch", data.reply || "No response returned.");
+    const botReply = data.reply || "No response returned.";
+    appendChat("BahaWatch", botReply);
+    chatHistory.push({ role: "assistant", content: botReply });
 
     if (data.map_payload && mapEnabled) {
       if (data.map_payload.type === "route" && data.map_payload.route) {

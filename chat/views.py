@@ -36,6 +36,9 @@ def chat_api(request):
     tool_calls = payload.get("tool_calls")
     if tool_calls is not None and not isinstance(tool_calls, list):
         return JsonResponse({"error": "tool_calls must be an array"}, status=400)
+    chat_history = payload.get("chat_history")
+    if chat_history is not None and not isinstance(chat_history, list):
+        return JsonResponse({"error": "chat_history must be an array"}, status=400)
 
     result = run_tool_router(
         message=message,
@@ -45,5 +48,6 @@ def chat_api(request):
         dest_lng=dest_lng,
         language=language,
         tool_calls=tool_calls,
+        chat_history=chat_history,
     )
     return JsonResponse(result)

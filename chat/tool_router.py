@@ -2,6 +2,9 @@ import json
 import re
 from typing import Any
 
+import requests
+from django.conf import settings
+
 from core.services import nearest_evacuation_centers
 from risk.risk_engine import estimate_flood_risk
 from risk.upstream import compute_upstream_rain_index
@@ -11,6 +14,86 @@ from routing.routing_engine import compute_safe_route
 def parse_coordinate_pairs(message: str) -> list[tuple[float, float]]:
     matches = re.findall(r"(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)", message)
     return [(float(lat), float(lng)) for lat, lng in matches]
+
+
+def _tokenize_text(message: str) -> set[str]:
+    return {token for token in re.findall(r"[a-z0-9]+", message.lower()) if token}
+
+
+def _normalize_chat_history(history: Any) -> list[dict[str, str]]:
+    if not isinstance(history, list):
+        return []
+
+    normalized: list[dict[str, str]] = []
+    for entry in history:
+        if not isinstance(entry, dict):
+            continue
+
+        role = str(entry.get("role", "user")).strip().lower()
+        if role not in {"user", "assistant"}:
+            continue
+
+        content = str(
+            entry.get("content", entry.get("message", "") or entry.get("text", ""))
+        ).strip()
+        if not content:
+            continue
+
+        normalized.append({"role": role, "content": content})
+
+    return normalized[-10:]
+
+
+def _detect_tool_intents(message: str) -> tuple[bool, bool, bool, bool]:
+    lower = message.lower()
+    tokens = _tokenize_text(message)
+
+    risk_terms = {
+        "risk",
+        "flood",
+        "flooding",
+        "rain",
+        "rainfall",
+        "weather",
+        "typhoon",
+        "storm",
+        "floodwatch",
+    }
+    evac_terms = {
+        "evac",
+        "evacuation",
+        "evacuate",
+        "shelter",
+        "shelters",
+        "center",
+        "centers",
+        "evacuee",
+        "evacuees",
+    }
+    route_terms = {
+        "route",
+        "routes",
+        "safe",
+        "safest",
+        "fastest",
+        "directions",
+        "drive",
+        "travel",
+        "path",
+        "go",
+        "goes",
+    }
+    upstream_terms = {"upstream", "downstream"}
+
+    include_risk = any(term in tokens for term in risk_terms)
+    include_evac = (
+        any(term in tokens for term in evac_terms)
+        or ("center" in tokens and ("evac" in tokens or "evacuation" in tokens))
+    )
+    include_route = any(term in tokens for term in route_terms)
+    include_upstream = any(term in tokens for term in upstream_terms)
+
+    return include_risk, include_evac, include_route, include_upstream
 
 
 def tool_get_risk(lat: float, lng: float, hours: int = 3) -> dict:
@@ -76,10 +159,14 @@ def tool_get_safe_route(
 
 def _build_tool_plan(message: str, default_hours: int, need_route: bool) -> list[dict]:
     lower = message.lower()
-    include_risk = "risk" in lower or "rain" in lower or "typhoon" in lower or "weather" in lower
-    include_evac = "evac" in lower or "where" in lower or "evacuate" in lower
-    include_route = "route" in lower or "go" in lower or need_route
-    include_upstream = "upstream" in lower or "downstream" in lower
+    include_risk, include_evac, include_route, include_upstream = _detect_tool_intents(
+        message
+    )
+    if need_route:
+        include_route = True
+
+    if not (include_risk or include_evac or include_route or include_upstream):
+        return []
 
     if "fastest" in lower:
         route_mode = "fastest"
@@ -87,9 +174,6 @@ def _build_tool_plan(message: str, default_hours: int, need_route: bool) -> list
         route_mode = "safest"
     else:
         route_mode = "safest"
-
-    if not (include_risk or include_evac or include_route or include_upstream):
-        include_risk = True
 
     plan = []
     if include_risk:
@@ -343,6 +427,128 @@ def _build_conversational_reply(
     return " ".join(parts)
 
 
+def _build_fallback_chat_reply(message: str, language: str) -> str:
+    lang = _normalize_language(language)
+    lower = (message or "").lower()
+    tokens = _tokenize_text(lower)
+
+    if lang == "tl":
+        if {"hello", "hi", "kumusta", "kamusta"} & tokens:
+            return "Kamusta! Itutulungan kita sa flood risk, mga evacuation center, at route options."
+        if {"thank", "salamat", "thanks"} & tokens:
+            return "Walang anuman. Nandito lang ako para sa safety sa baha, evacuation, at ruta."
+        if {"help", "ano", "what"}.intersection(tokens):
+            return (
+                "Nandito ako para sa flood safety. Pwede mo akong tanungin tungkol sa risk ng baha, "
+                "pinakamalapit na evacuation center, o route para ligtas o pinakamabilis."
+            )
+        return "Sige, nandito ako para tumulong. Ibig mo ba ng risk, evacuation center, o ruta ngayon?"
+    if lang == "ilo":
+        if {"hello", "hi", "kumusta", "kamusta"} & tokens:
+            return "Kamusta! Pwede ta buligan ka sa flood risk, evacuation center, kag mga ruta."
+        if {"thank", "salamat", "thanks"} & tokens:
+            return "Wala sapayan. Nandito ko ya para sa flood safety, evacuation, kag ruta."
+        if {"help", "ano", "what"}.intersection(tokens):
+            return (
+                "Nandito ako para sa flood safety. Pwede mo mangayo sang risk, pinaka-duol nga evacuation "
+                "center, o route para sa pinakamaluwas o pinakamadali."
+            )
+        return "Sige, pwede ta magfocus sa flood risk, pinakamaduol nga evacuation center, o rutas para sa imo."
+    if lang == "ceb":
+        if {"hello", "hi", "kumusta", "kamusta"} & tokens:
+            return "Hi! Makatabang ko sa flood risk, evacuation center, ug route."
+        if {"thank", "salamat", "thanks"} & tokens:
+            return "Walay sapayan. Naa koy handa sa flood safety, evacuation, ug ruta."
+        if {"help", "unsa", "what"}.intersection(tokens):
+            return (
+                "Anaa ko para sa flood safety. Pwede ka mangutana bahin sa risk, pinakaduol nga evacuation "
+                "center, o route para sa pinaka-safe o pinakadali."
+            )
+        return "Sige, unsa imong gusto - risk check, evacuation center, o ruta?"
+
+    if {"hello", "hi", "hey"} & tokens:
+        return "Hi! I can help with flood risk, evacuation centers, and routes. Ask me anything about those."
+    if {"thank", "thanks"} & tokens:
+        return "You're welcome. I can help with flood risk, evacuation centers, and route guidance."
+    if {"help", "what", "can", "you", "do"} & tokens or "help" in lower:
+        return (
+            "I'm here for flood support. Ask about flood risk, nearest evacuation centers, "
+            "or safest/fastest routes."
+        )
+
+    return "I'm listening. Want me to check flood risk, nearest evacuation center, or suggest a route?"
+
+
+def _build_openai_reply(
+    message: str,
+    language: str,
+    lat: float,
+    lng: float,
+    chat_history: list[dict[str, str]] | None = None,
+) -> str | None:
+    api_key = str(getattr(settings, "OPENAI_API_KEY", "")).strip()
+    if not api_key or api_key == "your_key_here":
+        return None
+
+    history = _normalize_chat_history(chat_history)
+
+    if language == "tl":
+        persona = (
+            "You are BahaWatch, a flood-support assistant. Speak in conversational Tagalog."
+            " Ask follow-up questions when location-specific details are missing."
+        )
+    elif language == "ilo":
+        persona = (
+            "You are BahaWatch, a flood-support assistant. Speak in conversational Hiligaynon."
+            " Ask follow-up questions when location-specific details are missing."
+        )
+    elif language == "ceb":
+        persona = (
+            "You are BahaWatch, a flood-support assistant. Speak in conversational Cebuano."
+            " Ask follow-up questions when location-specific details are missing."
+        )
+    else:
+        persona = (
+            "You are BahaWatch, a concise flood-support assistant."
+            " Answer conversationally and use context from previous messages."
+        )
+
+    system_message = (
+        f"{persona} Current selected location is {lat:.6f}, {lng:.6f}. "
+        "You can refer to flood risk, evacuation centers, and safe route planning, but do not invent any tool results."
+    )
+
+    messages = [{"role": "system", "content": system_message}]
+    for item in history:
+        messages.append({"role": item["role"], "content": item["content"]})
+    messages.append({"role": "user", "content": message})
+
+    try:
+        response = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "gpt-4o-mini",
+                "messages": messages,
+                "max_tokens": 280,
+                "temperature": 0.2,
+            },
+            timeout=20,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        choice = payload.get("choices", [{}])[0]
+        message_content = (
+            choice.get("message", {}).get("content") if isinstance(choice, dict) else None
+        )
+        return str(message_content or "").strip() or None
+    except (requests.RequestException, ValueError, TypeError, KeyError):
+        return None
+
+
 def run_tool_router(
     message: str,
     lat: float,
@@ -351,6 +557,7 @@ def run_tool_router(
     dest_lng: float | None = None,
     language: str | None = "en",
     tool_calls: list[dict] | None = None,
+    chat_history: list[dict[str, str]] | None = None,
 ) -> dict:
     lat_lng_pairs = parse_coordinate_pairs(message)
     if lat_lng_pairs:
@@ -362,6 +569,20 @@ def run_tool_router(
     requested_hours = 3
     if tool_calls is None:
         tool_calls = _build_tool_plan(message, requested_hours, dest_lat is not None and dest_lng is not None)
+
+    if not tool_calls:
+        openai_reply = _build_openai_reply(
+            message=message, language=language, lat=lat, lng=lng, chat_history=chat_history
+        )
+        if openai_reply is None:
+            openai_reply = _build_fallback_chat_reply(message, language)
+        return {
+            "reply": openai_reply,
+            "actions_taken": [],
+            "tools_called": [],
+            "tool_outputs": [],
+            "map_payload": None,
+        }
 
     tool_outputs = []
     tool_results: dict[str, Any] = {}
@@ -431,6 +652,20 @@ def run_tool_router(
 
         else:
             continue
+
+    if not tool_results:
+        openai_reply = _build_openai_reply(
+            message=message, language=language, lat=lat, lng=lng, chat_history=chat_history
+        )
+        if openai_reply is None:
+            openai_reply = _build_fallback_chat_reply(message, language)
+        return {
+            "reply": openai_reply,
+            "actions_taken": [],
+            "tools_called": [],
+            "tool_outputs": [],
+            "map_payload": None,
+        }
 
     map_payload: dict[str, Any] | None = None
     if "route" in tool_results:
