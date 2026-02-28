@@ -1,4 +1,4 @@
-# BahaWatch MVP (Django)
+# Bantay Baha AI MVP (Django)
 
 Minimal hackathon MVP for:
 - 1-6 hour flood risk estimation
