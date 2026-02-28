@@ -1,5 +1,6 @@
 *.pyc
 .DS_Store
+.env
 .venv/
 /data/negros_dem.tif
 /data/negros_graph.graphml

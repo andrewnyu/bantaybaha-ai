@@ -3,6 +3,30 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
+def _load_env_file(path: Path) -> None:
+    if not path.exists():
+        return
+
+    for raw_line in path.read_text().splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+
+        if line.startswith("export "):
+            line = line[len("export ") :].strip()
+
+        key, sep, value = line.partition("=")
+        if not sep:
+            continue
+
+        env_key = key.strip()
+        env_value = value.strip().strip('"').strip("'")
+        os.environ.setdefault(env_key, env_value)
+
+
+_load_env_file(BASE_DIR / ".env")
+
 SECRET_KEY = "django-insecure-hackathon-mvp-key"
 DEBUG = True
 ALLOWED_HOSTS = []
