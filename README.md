@@ -1,10 +1,22 @@
+![Bantay Baha AI Logo](./bantay-baha-ai-logo.png)
+
 # Bantay Baha AI MVP (Django)
 
 Minimal hackathon MVP for:
 - 1-6 hour flood risk estimation
 - nearest evacuation center lookup
 - safer routing around flood-prone zones
-- rule-based chat endpoint that orchestrates these tools
+- rule-based chat endpoint that orchestrates all key tools and can answer flood Q&A
+- local-language interaction for residents and responders (English + Tagalog/Visayan intent handling)
+- OpenAI API-backed chat responses using structured tool outputs
+
+The assistant can:
+- project and explain flood levels
+- lookup nearest evacuation center
+- provide safe routing to an evacuation center
+- summarize relevant contextual metadata (hazard score, nearest center, routing status, and confidence)
+
+Demo mode is included to run repeatable typhoon scenarios for quick testing without live weather dependency.
 
 ## Quickstart
 
@@ -44,7 +56,7 @@ Open `http://127.0.0.1:8000/`.
 
 ### Demo weather mode
 
-Both `/api/risk/` and `/api/safe-route/` support a demo scenario flow by adding:
+`/api/risk/`, `/api/safe-route/`, and chat flows support demo typhoon scenarios by adding:
 
 - `weather_mode=demo`
 - `demo_rainfall` as a comma list or JSON array
