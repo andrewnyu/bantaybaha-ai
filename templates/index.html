@@ -19,7 +19,10 @@
       <span class="brand">BahaWatch</span>
       <span class="subtitle">Flood Early Warning · Negros Island</span>
     </div>
-    <p>Click the map to check risk, load evacuation centers, and build safer routes.</p>
+    <nav class="tab-nav">
+      <a class="tab-link active" href="/">Home</a>
+    </nav>
+    <p>Tap the map, check flood risk, then use chat for evacuation and routing questions.</p>
   </header>
 
   <main class="layout">
@@ -30,47 +33,33 @@
     <section class="control-panel">
       <div class="card google-card">
         <h2>Flood Risk (1-6h)</h2>
-        <label for="hoursRange">Forecast window: <span id="hoursValue">3</span>h</label>
-        <input id="hoursRange" type="range" min="1" max="6" value="3" />
         <button id="riskBtn" class="action-btn">Check Risk</button>
-        <div id="riskOutput" class="output muted">No location selected yet.</div>
+        <div id="riskOutput" class="output muted">Select a point, then click Check Flood Risk.</div>
       </div>
 
-      <div class="card google-card">
-        <h2>Area Risk Sweep</h2>
-        <button id="riskAreaBtn" class="action-btn">Scan Negros Flood Risk</button>
-        <div class="toggle-row">
-          <label>
-            <input id="toggleRivers" type="checkbox" checked />
-            Highlight Rivers
-          </label>
-          <label>
-            <input id="toggleFloodedRoads" type="checkbox" checked />
-            Highlight Floodable Roads
-          </label>
-        </div>
-        <div id="riskAreaOutput" class="output muted">Run a scan to see area risk overlays.</div>
-      </div>
-
-      <div class="card google-card">
-        <h2>Evacuation & Routing</h2>
-        <button id="evacBtn" class="action-btn">Find Nearest 3 Centers</button>
-        <label for="routeMode">Route mode</label>
-        <select id="routeMode">
-          <option value="safest">Safest</option>
-          <option value="fastest">Fastest</option>
-        </select>
-        <button id="routeBtn" class="action-btn">Find Safe Evac Route</button>
-        <div id="evacOutput" class="output"></div>
-        <div id="routeOutput" class="output"></div>
-      </div>
-
-      <div class="card google-card chat-card">
-        <h2>Agentic Chat (Rule-based)</h2>
+      <div class="card google-card chat-card locked" id="chatCard">
+        <h2>Assistant</h2>
+        <div id="chatUnlockHint" class="muted">Run flood risk first to unlock chat.</div>
         <form id="chatForm">
-          <input id="chatInput" type="text" placeholder="e.g. Is my area at risk?" />
-          <button type="submit" class="send-btn">Send</button>
+          <input id="chatInput" type="text" placeholder="Ask for nearest center or routing next." disabled />
+          <button id="chatSendBtn" type="submit" class="send-btn" disabled>Send</button>
         </form>
+        <div class="chat-suggestions" id="chatSuggestions">
+          <button type="button" class="chat-suggestion" data-message="Find nearest evacuation center." disabled>
+            Nearest evacuation center
+          </button>
+          <button type="button" class="chat-suggestion" data-message="Show safe route to nearest evacuation center." disabled>
+            Safe route to nearest center
+          </button>
+          <button type="button" class="chat-suggestion" data-message="Show fastest route to nearest evacuation center." disabled>
+            Fastest route to nearest center
+          </button>
+        </div>
+        <label for="openaiKeyInput">OpenAI key (optional)</label>
+        <input id="openaiKeyInput" type="password" placeholder="Paste API key to enable the AI-backed flow" disabled />
+        {% if has_openai_key %}
+          <p class="map-note">Server OpenAI key is already configured.</p>
+        {% endif %}
         <div id="chatLog" class="chat-log"></div>
       </div>
     </section>

@@ -67,6 +67,7 @@ def tool_get_safe_route(
         dest_lng=dest_lng,
         safety_weight=safety_weight,
     )
+    payload["mode"] = "safest" if safety_weight > 0 else "fastest"
     return {
         "tool": "tool_get_safe_route",
         "result": payload,
@@ -80,6 +81,13 @@ def _build_tool_plan(message: str, default_hours: int, need_route: bool) -> list
     include_route = "route" in lower or "go" in lower or need_route
     include_upstream = "upstream" in lower or "downstream" in lower
 
+    if "fastest" in lower:
+        route_mode = "fastest"
+    elif "safe" in lower:
+        route_mode = "safest"
+    else:
+        route_mode = "safest"
+
     if not (include_risk or include_evac or include_route or include_upstream):
         include_risk = True
 
@@ -91,7 +99,7 @@ def _build_tool_plan(message: str, default_hours: int, need_route: bool) -> list
     if include_evac:
         plan.append({"tool": "tool_get_evac_centers", "arguments": {}})
     if include_route:
-        plan.append({"tool": "tool_get_safe_route", "arguments": {"mode": "safest"}})
+        plan.append({"tool": "tool_get_safe_route", "arguments": {"mode": route_mode}})
 
     return plan
 
@@ -106,6 +114,7 @@ def run_tool_router(
     lng: float,
     dest_lat: float | None = None,
     dest_lng: float | None = None,
+    openai_key: str | None = None,
     tool_calls: list[dict] | None = None,
 ) -> dict:
     lat_lng_pairs = parse_coordinate_pairs(message)
@@ -116,6 +125,8 @@ def run_tool_router(
 
     default_hours = 3
     requested_hours = 3
+    _ = openai_key
+
     if tool_calls is None:
         tool_calls = _build_tool_plan(message, requested_hours, dest_lat is not None and dest_lng is not None)
 
@@ -222,6 +233,7 @@ def run_tool_router(
             "route": route.get("route", []),
             "origin_node": route.get("origin_node"),
             "destination_node": route.get("destination_node"),
+            "mode": route.get("mode", "safest"),
         }
 
     return {

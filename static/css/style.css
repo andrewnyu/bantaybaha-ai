@@ -51,6 +51,29 @@ body {
   font-size: 0.93rem;
 }
 
+.tab-nav {
+  margin-top: 0.65rem;
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.tab-link {
+  display: inline-block;
+  text-decoration: none;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid #d2d7dd;
+  border-radius: 999px;
+  color: #1f1f1f;
+  background: #ffffff;
+}
+
+.tab-link.active {
+  border-color: var(--google-blue);
+  color: var(--google-blue);
+  font-weight: 600;
+}
+
 .layout {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
@@ -103,6 +126,10 @@ body {
   cursor: pointer;
 }
 
+.muted {
+  color: var(--muted);
+}
+
 label {
   color: var(--muted);
   font-size: 0.86rem;
@@ -144,6 +171,10 @@ button:disabled {
   opacity: 0.6;
 }
 
+.chat-card.locked {
+  opacity: 0.92;
+}
+
 #chatForm {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -157,6 +188,36 @@ button:disabled {
 
 .send-btn {
   padding: 0 1rem;
+}
+
+.chat-suggestions {
+  display: grid;
+  gap: 0.4rem;
+  margin-bottom: 0.55rem;
+}
+
+.chat-suggestion {
+  appearance: none;
+  border: 1px solid #d7dce5;
+  border-radius: 999px;
+  padding: 0.45rem 0.7rem;
+  background: #eef4ff;
+  color: #1f1f1f;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+
+.chat-suggestion:hover {
+  background: #dfe8ff;
+}
+
+.chat-suggestion:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+#openaiKeyInput[type="password"] {
+  margin-top: 0.25rem;
 }
 
 .output {

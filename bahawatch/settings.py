@@ -95,3 +95,4 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # External integrations
 OPENWEATHER_API_KEY = os.environ.get("OPENWEATHER_API_KEY", "your_key_here")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", os.environ.get("OPEN_AI_API_KEY", ""))
