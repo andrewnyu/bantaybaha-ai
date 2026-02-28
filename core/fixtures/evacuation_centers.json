@@ -3,9 +3,9 @@
     "model": "core.evacuationcenter",
     "pk": 1,
     "fields": {
-      "name": "Marikina Sports Center",
-      "latitude": 14.6396,
-      "longitude": 121.098,
+      "name": "Bacolod City Hall Gym",
+      "latitude": 10.6769,
+      "longitude": 122.9518,
       "capacity": 2500
     }
   },
@@ -13,9 +13,9 @@
     "model": "core.evacuationcenter",
     "pk": 2,
     "fields": {
-      "name": "Quezon City Hall Gym",
-      "latitude": 14.6514,
-      "longitude": 121.0494,
+      "name": "Bacolod Sports Complex",
+      "latitude": 10.6360,
+      "longitude": 122.9382,
       "capacity": 1800
     }
   },
@@ -23,30 +23,70 @@
     "model": "core.evacuationcenter",
     "pk": 3,
     "fields": {
-      "name": "Pasig Mega Center",
-      "latitude": 14.5764,
-      "longitude": 121.0851,
-      "capacity": 2200
+      "name": "Silay City Hall",
+      "latitude": 10.7938,
+      "longitude": 122.9721,
+      "capacity": 1200
     }
   },
   {
     "model": "core.evacuationcenter",
     "pk": 4,
     "fields": {
-      "name": "Taguig City Evac Hub",
-      "latitude": 14.5176,
-      "longitude": 121.0509,
-      "capacity": 1500
+      "name": "Talisay City Gymnasium",
+      "latitude": 10.7315,
+      "longitude": 122.9714,
+      "capacity": 900
     }
   },
   {
     "model": "core.evacuationcenter",
     "pk": 5,
     "fields": {
-      "name": "Manila North High Shelter",
-      "latitude": 14.6242,
-      "longitude": 120.9843,
-      "capacity": 1400
+      "name": "Kabankalan City Multipurpose Hall",
+      "latitude": 9.9850,
+      "longitude": 122.8108,
+      "capacity": 2000
+    }
+  },
+  {
+    "model": "core.evacuationcenter",
+    "pk": 6,
+    "fields": {
+      "name": "Dumaguete City Sports Arena",
+      "latitude": 9.3075,
+      "longitude": 123.3050,
+      "capacity": 1500
+    }
+  },
+  {
+    "model": "core.evacuationcenter",
+    "pk": 7,
+    "fields": {
+      "name": "Bayawan City Hall Gym",
+      "latitude": 9.3753,
+      "longitude": 122.8082,
+      "capacity": 1100
+    }
+  },
+  {
+    "model": "core.evacuationcenter",
+    "pk": 8,
+    "fields": {
+      "name": "Bais City Hall Gym",
+      "latitude": 9.5895,
+      "longitude": 123.1163,
+      "capacity": 1000
+    }
+  },
+  {
+    "model": "core.evacuationcenter",
+    "pk": 9,
+    "fields": {
+      "name": "Valencia City Sports Center",
+      "latitude": 9.2767,
+      "longitude": 122.9019,
+      "capacity": 1300
     }
   }
 ]

@@ -1,4 +1,4 @@
-const DEFAULT_COORD = { lat: 14.5995, lng: 120.9842 };
+const DEFAULT_COORD = { lat: 10.6769, lng: 122.9518 };
 
 const map = L.map("map").setView([DEFAULT_COORD.lat, DEFAULT_COORD.lng], 12);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -60,12 +60,10 @@ async function fetchRisk() {
     return;
   }
 
-  const text = [
-    `Risk Score: ${data.risk_score}`,
-    `Level: ${data.risk_level}`,
+  riskOutput.innerHTML = [
+    `<span class="risk-pill">${data.risk_level} • ${data.risk_score}</span>`,
     `Signals: ${data.explanation.join(", ")}`,
-  ].join("\n");
-  riskOutput.textContent = text;
+  ].join("<br/>");
 
   if (riskCircle) {
     map.removeLayer(riskCircle);
@@ -103,12 +101,15 @@ async function fetchEvacCenters() {
     centerMarkers.push(marker);
   });
 
-  evacOutput.textContent = nearestCenters
+  evacOutput.innerHTML = nearestCenters
     .map(
       (center, index) =>
-        `${index + 1}. ${center.name} - ${center.distance_km} km (capacity ${center.capacity})`
+        `${index + 1}. ${center.name}<br/>${center.distance_km} km · cap ${center.capacity}`
     )
-    .join("\n");
+    .join("<br/><br/>");
+  if (!evacOutput.innerHTML) {
+    evacOutput.innerHTML = "No centers found.";
+  }
 }
 
 async function fetchRoute() {
@@ -139,7 +140,7 @@ async function fetchRoute() {
 
   const latlngs = data.route.map((point) => [point.lat, point.lng]);
   routeLine = L.polyline(latlngs, {
-    color: mode === "safe" ? "#1d6fa3" : "#6d4c41",
+    color: mode === "fastest" ? "#6d4c41" : "#1d6fa3",
     weight: 5,
   }).addTo(map);
 
@@ -177,17 +178,28 @@ async function submitChat(event) {
 
   const data = await response.json();
   if (!response.ok) {
-    appendChat("Bot", data.error || "Chat request failed.");
+    appendChat("BahaWatch", data.error || "Chat request failed.");
     return;
   }
 
-  appendChat("Bot", `${data.reply}\nActions: ${data.actions_taken.join(", ") || "none"}`);
+  const actionText =
+    data.actions_taken && data.actions_taken.length
+      ? `<br/><br/>Actions: ${data.actions_taken.join(", ")}`
+      : "";
+  appendChat("BahaWatch", `${data.reply}${actionText}`);
 }
 
 function appendChat(author, text) {
+  const isUser = author === "You";
   const line = document.createElement("div");
-  line.className = "chat-line";
-  line.innerHTML = `<strong>${author}:</strong> ${text}`;
+  line.className = `chat-message ${isUser ? "user" : "bot"}`;
+
+  const bubble = document.createElement("div");
+  bubble.className = "chat-bubble";
+  const sender = `<span class="chat-meta">${author}</span>`;
+  const safeText = typeof text === "string" ? text : JSON.stringify(text);
+  bubble.innerHTML = `${sender}<br/>${safeText}`;
+  line.appendChild(bubble);
   chatLog.appendChild(line);
   chatLog.scrollTop = chatLog.scrollHeight;
 }

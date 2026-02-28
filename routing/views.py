@@ -21,13 +21,13 @@ def safe_route_api(request):
             status=400,
         )
 
-    mode = request.GET.get("mode", "safe").lower()
-    if mode == "fast":
+    mode = request.GET.get("mode", "safest").lower()
+    if mode in {"fast", "fastest"}:
         safety_weight = 0.0
-    elif mode == "safe":
+    elif mode in {"safe", "safest"}:
         safety_weight = 2.0
     else:
-        return JsonResponse({"error": "mode must be 'fast' or 'safe'"}, status=400)
+        return JsonResponse({"error": "mode must be 'fast', 'fastest', 'safe', or 'safest'"}, status=400)
 
     try:
         payload = compute_safe_route(

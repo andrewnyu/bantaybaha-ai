@@ -4,6 +4,7 @@ from pathlib import Path
 import networkx as nx
 import osmnx as ox
 
+from core.geo import haversine_km
 from risk.risk_engine import get_forecast_rainfall_sum_mm
 from risk.upstream import compute_upstream_rain_index
 
@@ -31,8 +32,23 @@ def load_graph() -> nx.MultiDiGraph:
 
 
 def nearest_node_id(graph: nx.Graph, lat: float, lng: float) -> int:
-    nearest = ox.distance.nearest_nodes(graph, lng, lat)
-    return int(nearest)
+    try:
+        nearest = ox.distance.nearest_nodes(graph, lng, lat)
+        return int(nearest)
+    except Exception:
+        # Fallback when optional OSMnx/k-dtree deps (e.g., scikit-learn) are not installed.
+        nearest = None
+        nearest_distance = float("inf")
+        for node_id, attrs in graph.nodes(data=True):
+            node_lng = float(attrs.get("x", 0.0))
+            node_lat = float(attrs.get("y", 0.0))
+            distance = haversine_km(lat, lng, node_lat, node_lng)
+            if distance < nearest_distance:
+                nearest = node_id
+                nearest_distance = distance
+        if nearest is None:
+            raise ValueError("No nodes found in road graph")
+        return int(nearest)
 
 
 def extract_local_graph(graph: nx.MultiDiGraph, origin: int, destination: int) -> nx.MultiDiGraph:
