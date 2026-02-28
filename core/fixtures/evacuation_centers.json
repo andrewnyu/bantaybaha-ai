@@ -1,0 +1,52 @@
+[
+  {
+    "model": "core.evacuationcenter",
+    "pk": 1,
+    "fields": {
+      "name": "Marikina Sports Center",
+      "latitude": 14.6396,
+      "longitude": 121.098,
+      "capacity": 2500
+    }
+  },
+  {
+    "model": "core.evacuationcenter",
+    "pk": 2,
+    "fields": {
+      "name": "Quezon City Hall Gym",
+      "latitude": 14.6514,
+      "longitude": 121.0494,
+      "capacity": 1800
+    }
+  },
+  {
+    "model": "core.evacuationcenter",
+    "pk": 3,
+    "fields": {
+      "name": "Pasig Mega Center",
+      "latitude": 14.5764,
+      "longitude": 121.0851,
+      "capacity": 2200
+    }
+  },
+  {
+    "model": "core.evacuationcenter",
+    "pk": 4,
+    "fields": {
+      "name": "Taguig City Evac Hub",
+      "latitude": 14.5176,
+      "longitude": 121.0509,
+      "capacity": 1500
+    }
+  },
+  {
+    "model": "core.evacuationcenter",
+    "pk": 5,
+    "fields": {
+      "name": "Manila North High Shelter",
+      "latitude": 14.6242,
+      "longitude": 120.9843,
+      "capacity": 1400
+    }
+  }
+]

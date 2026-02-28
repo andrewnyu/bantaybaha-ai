@@ -1,0 +1,25 @@
+{
+  "nodes": {
+    "n1": {"lat": 14.5995, "lng": 120.9842},
+    "n2": {"lat": 14.626, "lng": 121.0437},
+    "n3": {"lat": 14.619, "lng": 121.053},
+    "n4": {"lat": 14.6507, "lng": 121.1029},
+    "n5": {"lat": 14.5764, "lng": 121.0851},
+    "n6": {"lat": 14.5547, "lng": 121.0244},
+    "n7": {"lat": 14.5176, "lng": 121.0509},
+    "n8": {"lat": 14.5866, "lng": 121.1222}
+  },
+  "edges": [
+    {"from": "n1", "to": "n2", "distance": 8.2},
+    {"from": "n2", "to": "n3", "distance": 1.8},
+    {"from": "n3", "to": "n4", "distance": 6.7},
+    {"from": "n3", "to": "n5", "distance": 5.4},
+    {"from": "n5", "to": "n8", "distance": 4.2},
+    {"from": "n8", "to": "n4", "distance": 5.9},
+    {"from": "n5", "to": "n6", "distance": 7.0},
+    {"from": "n6", "to": "n7", "distance": 5.6},
+    {"from": "n5", "to": "n7", "distance": 8.8},
+    {"from": "n2", "to": "n5", "distance": 7.4},
+    {"from": "n1", "to": "n6", "distance": 6.9}
+  ]
+}

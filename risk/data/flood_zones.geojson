@@ -1,0 +1,41 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Marikina River Basin"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [121.064, 14.595],
+            [121.12, 14.595],
+            [121.12, 14.67],
+            [121.064, 14.67],
+            [121.064, 14.595]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Pasig Lowland Pocket"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [121.03, 14.54],
+            [121.09, 14.54],
+            [121.09, 14.595],
+            [121.03, 14.595],
+            [121.03, 14.54]
+          ]
+        ]
+      }
+    }
+  ]
+}

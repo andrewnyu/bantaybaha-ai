@@ -1,0 +1,126 @@
+:root {
+  --bg: #f4f7f4;
+  --panel: #ffffff;
+  --ink: #1f2a2e;
+  --muted: #5a6b73;
+  --accent: #1d6fa3;
+  --border: #d5dde0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(130deg, #e5f3ff, #f4f7f4 40%, #e6efe8);
+  color: var(--ink);
+}
+
+.topbar {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.topbar h1 {
+  margin: 0 0 0.4rem;
+  font-size: 1.2rem;
+}
+
+.topbar p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+#map {
+  width: 100%;
+  min-height: 76vh;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+.control-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.9rem;
+}
+
+.card h2 {
+  margin: 0 0 0.65rem;
+  font-size: 1rem;
+}
+
+button,
+select,
+input[type="text"] {
+  width: 100%;
+  padding: 0.55rem;
+  margin-top: 0.45rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+
+button {
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  cursor: pointer;
+}
+
+button:hover {
+  filter: brightness(0.95);
+}
+
+.output {
+  margin-top: 0.6rem;
+  font-size: 0.9rem;
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+
+.chat-log {
+  margin-top: 0.6rem;
+  max-height: 210px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem;
+  background: #f9fbfc;
+  font-size: 0.9rem;
+}
+
+.chat-line {
+  margin-bottom: 0.4rem;
+}
+
+.chat-line strong {
+  color: var(--accent);
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  #map {
+    min-height: 50vh;
+  }
+}
