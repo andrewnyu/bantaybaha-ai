@@ -21,6 +21,7 @@ const selectedLocationLabel = document.getElementById("selectedLocationLabel");
 const demoWeatherToggle = document.getElementById("demoWeatherToggle");
 const demoRainfallInput = document.getElementById("demoRainfallInput");
 const demoHoursInput = document.getElementById("demoHoursInput");
+const demoScenarioSelect = document.getElementById("demoScenarioSelect");
 const demoWeatherContext = document.getElementById("demoWeatherContext");
 const demoUpstreamWeatherInput = document.getElementById("demoUpstreamWeatherInput");
 const generateUpstreamNodesBtn = document.getElementById("generateUpstreamNodesBtn");
@@ -50,6 +51,29 @@ let weatherSettings = {
   demoRainfall: "10,22,45,30,12,5",
   demoUpstreamWeather: "",
   forecastHours: 3,
+  demoScenario: "custom",
+};
+
+const DEMO_SCENARIOS = {
+  custom: {
+    label: "Custom",
+    rainfall: null,
+  },
+  high_rain: {
+    label: "High rain (typhoon level)",
+    rainfall: [140, 165, 150, 130, 110, 95],
+    upstream: null,
+  },
+  medium_rain: {
+    label: "Medium rain",
+    rainfall: [50, 45, 40, 32, 25, 18],
+    upstream: null,
+  },
+  no_rain_high_upstream: {
+    label: "No rain, high upstream rain",
+    rainfall: [0, 0, 0, 0, 0, 0],
+    upstream: [120, 135, 115, 95, 70, 55],
+  },
 };
 
 const shownWarnings = new Set();
@@ -115,6 +139,9 @@ const loadWeatherSettings = () => {
     }
     if (Number.isFinite(parsed.forecastHours)) {
       weatherSettings.forecastHours = Math.min(6, Math.max(1, Number(parsed.forecastHours)));
+    }
+    if (typeof parsed.demoScenario === "string" && DEMO_SCENARIOS[parsed.demoScenario]) {
+      weatherSettings.demoScenario = parsed.demoScenario;
     }
   } catch (error) {
     // Keep defaults.
@@ -223,6 +250,43 @@ const formatRainfallPreview = (values) => {
   return values.join(", ");
 };
 
+const applyDemoScenario = (scenarioKey, options = {}) => {
+  const scenario = DEMO_SCENARIOS[scenarioKey] || DEMO_SCENARIOS.custom;
+  const nextScenario = Object.keys(DEMO_SCENARIOS).includes(scenarioKey)
+    ? scenarioKey
+    : "custom";
+
+  weatherSettings.demoScenario = nextScenario;
+
+  if (nextScenario !== "custom" && Array.isArray(scenario.rainfall)) {
+    const valueText = scenario.rainfall.join(",");
+    weatherSettings.demoRainfall = valueText;
+    if (demoRainfallInput) {
+      demoRainfallInput.value = valueText;
+    }
+  }
+
+  if (demoScenarioSelect) {
+    demoScenarioSelect.value = nextScenario;
+  }
+
+  if (!options.skipStatus) {
+    if (nextScenario === "custom") {
+      setDemoTabStatus("Using custom manual rainfall inputs.", "info");
+    } else if (nextScenario === "no_rain_high_upstream") {
+      setDemoTabStatus(
+        "Scenario set: no local rain, high upstream rain. Click Generate upstream nodes to populate per-node overrides.",
+        "info"
+      );
+    } else {
+      setDemoTabStatus(`Scenario set: ${scenario.label}.`, "info");
+    }
+  }
+
+  saveWeatherSettings();
+  syncWeatherSettingsUI();
+};
+
 const setDemoTabStatus = (message, level = "info") => {
   if (!demoTabStatus) {
     return;
@@ -313,6 +377,13 @@ const syncWeatherSettingsUI = () => {
   if (demoHoursInput) {
     demoHoursInput.disabled = !Boolean(weatherSettings.demoModeEnabled);
     demoHoursInput.value = String(clampedHours);
+  }
+  if (demoScenarioSelect) {
+    const selectedScenario = DEMO_SCENARIOS[weatherSettings.demoScenario]
+      ? weatherSettings.demoScenario
+      : "custom";
+    demoScenarioSelect.value = selectedScenario;
+    weatherSettings.demoScenario = selectedScenario;
   }
   if (demoRainfallInput) {
     demoRainfallInput.disabled = !Boolean(weatherSettings.demoModeEnabled);
@@ -506,10 +577,11 @@ const generateUpstreamNodePayloadFromRisk = async () => {
 
     const generated = nodes.map((node) => {
       const key = normalizeDemoUpstreamNodeKey(node.lat, node.lng);
+      const scenarioProfile = DEMO_SCENARIOS[weatherSettings.demoScenario]?.upstream;
       return {
         lat: Number(node.lat),
         lng: Number(node.lng),
-        demo_rainfall: overrideMap.get(key) || [],
+        demo_rainfall: overrideMap.get(key) || scenarioProfile || [],
       };
     });
 
@@ -697,9 +769,19 @@ if (demoWeatherToggle) {
   });
 }
 
+if (demoScenarioSelect) {
+  demoScenarioSelect.addEventListener("change", () => {
+    applyDemoScenario(demoScenarioSelect.value);
+  });
+}
+
 if (demoRainfallInput) {
   demoRainfallInput.addEventListener("input", () => {
     weatherSettings.demoRainfall = demoRainfallInput.value;
+    weatherSettings.demoScenario = "custom";
+    if (demoScenarioSelect) {
+      demoScenarioSelect.value = "custom";
+    }
     saveWeatherSettings();
     syncWeatherSettingsUI();
   });
@@ -720,15 +802,23 @@ if (generateUpstreamNodesBtn) {
 if (demoUpstreamWeatherInput) {
   demoUpstreamWeatherInput.addEventListener("input", () => {
     weatherSettings.demoUpstreamWeather = demoUpstreamWeatherInput.value;
+    weatherSettings.demoScenario = "custom";
+    if (demoScenarioSelect) {
+      demoScenarioSelect.value = "custom";
+    }
     saveWeatherSettings();
   });
 }
 
-  if (clearDemoRainfallBtn) {
+if (clearDemoRainfallBtn) {
   clearDemoRainfallBtn.addEventListener("click", () => {
     weatherSettings.demoRainfall = "";
     weatherSettings.demoUpstreamWeather = "";
     weatherSettings.demoModeEnabled = true;
+    weatherSettings.demoScenario = "custom";
+    if (demoScenarioSelect) {
+      demoScenarioSelect.value = "custom";
+    }
     saveWeatherSettings();
     syncWeatherSettingsUI();
     setDemoTabStatus("Demo rainfall values cleared (will be treated as zeros).", "warn");
