@@ -176,6 +176,31 @@ def elevation_factor(elevation_m: float) -> float:
     return 35.0
 
 
+def estimate_flood_depth_m(
+    local_rain_mm: float,
+    upstream_norm: float,
+    elevation_m: float,
+) -> float:
+    rain_signal = clamp(local_rain_mm / 120.0, 0.0, 1.8)
+    upstream_signal = clamp(upstream_norm / 100.0, 0.0, 1.0) * 0.8
+    elevation_scale = clamp(1.2 - elevation_m / 250.0, 0.25, 1.0)
+
+    depth = (0.55 * rain_signal + 0.35 * upstream_signal) * elevation_scale
+    return round(clamp(depth, 0.0, 3.0), 2)
+
+
+def classify_flood_depth(level_m: float) -> str:
+    if level_m >= 2.0:
+        return "2-storey-height"
+    if level_m >= 1.0:
+        return "above-head"
+    if level_m >= 0.5:
+        return "chest"
+    if level_m >= 0.2:
+        return "knee"
+    return "shallow"
+
+
 def distance_to_nearest_river_km(lat: float, lng: float) -> float:
     river_union = load_river_union()
     if river_union is not None:
@@ -295,11 +320,12 @@ def estimate_flood_risk(
     ]
 
     dominant_points = upstream.get("dominant_upstream_points") or []
+    estimated_water_level = estimate_flood_depth_m(local_rain_3h, upstream_norm, elevation_m)
+    water_level_zone = classify_flood_depth(estimated_water_level)
     if dominant_points:
         top = dominant_points[0]
         explanation.append(
-            f"Heavy rainfall detected upstream in watershed ({top['rain_sum']} mm), likely to impact downstream in "
-            f"~{expected_peak} hours."
+            f"Heavy rainfall detected upstream in watershed ({top['rain_sum']} mm) near the river network."
         )
 
     if in_flood_zone:
@@ -314,6 +340,8 @@ def estimate_flood_risk(
         "risk_score": risk_score,
         "risk_level": risk_level,
         "expected_peak_in_hours": expected_peak,
+        "estimated_flood_level_m": estimated_water_level,
+        "flood_level_zone": water_level_zone,
         "explanation": explanation,
         "upstream_summary": upstream,
     }

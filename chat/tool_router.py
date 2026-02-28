@@ -556,11 +556,11 @@ def _build_conversational_reply(
     else:
         risk_high_label = "Flood risk is"
         low_risk_intro = (
-            f"I don't see rainfall or upstream impact for the next {forecast_hours} hours. "
+            "I don't see significant rainfall or upstream signal for now. "
             "So there is currently no immediate flood risk signal."
         )
         no_risk_intro = (
-            f"No flood risk is expected for the next {forecast_hours} hours. "
+            "No flood risk is flagged at this time. "
             "No rain or upstream impact was detected in the forecast window."
         )
         upstream_label = "Upstream signal"
@@ -598,20 +598,33 @@ def _build_conversational_reply(
                 f"Score: {risk_score}/100 ({risk_level})."
             )
         else:
+            water_level = risk_payload.get("estimated_flood_level_m")
+            water_zone = risk_payload.get("flood_level_zone")
+            zone_map = {
+                "shallow": "knee-level",
+                "knee": "knee level",
+                "chest": "chest level",
+                "above-head": "above-head level",
+                "2-storey-height": "2-storey height",
+            }
+            if isinstance(water_level, (int, float)) and water_zone:
+                readable_zone = zone_map.get(str(water_zone), str(water_zone))
+                parts.append(
+                    f"Estimated water level: {water_level:.2f} m ({readable_zone})."
+                )
+
             if risk_score >= 65:
                 parts.append(
-                    f"{risk_high_label} HIGH ({risk_score}/100) for the next {window_hours} hours. "
-                    "Please prepare and consider moving to safer ground."
+                    f"{risk_high_label} HIGH ({risk_score}/100). "
+                    "Evacuate immediately to safer high-ground."
                 )
             elif risk_score >= 35:
                 parts.append(
-                    f"{risk_high_label} MEDIUM ({risk_score}/100) for the next {window_hours} hours. "
-                    "Keep an eye on updates and avoid low-lying roads."
+                    f"{risk_high_label} MEDIUM ({risk_score}/100). "
+                    "Move to safer spots and avoid low-lying roads."
                 )
             else:
-                parts.append(
-                    f"{risk_high_label} LOW ({risk_score}/100) for the next {window_hours} hours."
-                )
+                parts.append(f"{risk_high_label} LOW ({risk_score}/100).")
 
         explanations = risk_payload.get("explanation")
         if explanations:
@@ -626,11 +639,9 @@ def _build_conversational_reply(
 
     if "upstream" in tool_results:
         up = tool_results["upstream"]
-        peak = up.get("expected_peak_in_hours")
-        peak_text = f"~{peak}h" if peak is not None else "n/a"
         parts.append(
             f"{upstream_label}: {up['upstream_rain_index']} (normalized {up['upstream_rain_index_norm']}), "
-            f"possible impact in {peak_text}."
+            "impact expected downstream."
         )
 
     if "evac" in tool_results:

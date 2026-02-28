@@ -1046,17 +1046,28 @@ const appendRiskMeterBubble = (riskPayload) => {
     return;
   }
 
+  const zoneLabelMap = {
+    shallow: "Below-knee depth",
+    knee: "Knee level",
+    chest: "Chest level",
+    "above-head": "Above-head level",
+    "2-storey-height": "2-storey height",
+  };
+
   const score = Math.max(0, Math.min(100, Math.round(scoreRaw)));
   const level = (riskPayload.risk_level || getRiskLevelClass(score)).toString().toUpperCase();
   const bandClass = getRiskLevelClass(score);
+  const floodLevel = Number(riskPayload.estimated_flood_level_m);
+  const rawZone = (riskPayload.flood_level_zone || "").toString();
+  const zoneText = zoneLabelMap[rawZone] || "";
+  const floodText =
+    Number.isFinite(floodLevel)
+      ? `Predicted depth: ${floodLevel.toFixed(2)}m (${zoneText || "estimated"}).`
+      : "Predicted depth: not available.";
   const line = document.createElement("div");
   line.className = "chat-message bot";
 
   const riskLabel = `Flood risk: ${score}/100 (${level})`;
-  const peakText =
-    riskPayload.expected_peak_in_hours !== null && riskPayload.expected_peak_in_hours !== undefined
-      ? `Peak expected in ${riskPayload.expected_peak_in_hours}h`
-      : "";
 
   const bubble = document.createElement("div");
   bubble.className = "chat-bubble chat-risk-meter";
@@ -1068,7 +1079,7 @@ const appendRiskMeterBubble = (riskPayload) => {
     <div class="chat-risk-track" role="presentation">
       <span class="chat-risk-fill risk-${bandClass.toLowerCase()}" style="width:${score}%"></span>
     </div>
-    <span class="chat-meta">${peakText || "Forecast window up to selected hours."}</span>
+    <span class="chat-meta">${floodText}</span>
   `;
 
   line.appendChild(bubble);
