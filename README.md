@@ -16,6 +16,31 @@ The assistant can:
 
 Demo mode is included to run repeatable typhoon scenarios for quick testing without live weather dependency.
 
+## Key Features Summary
+
+- Risk generation (1–6h flood forecast)
+  - Predict flood risk at a point using `/api/risk/` with optional demo rainfall inputs.
+  - Output includes hourly hazard levels, projected trend, and simplified confidence/context notes.
+
+- Chat and orchestrated Q&A
+  - Single chat entrypoint at `/api/chat/` that can invoke risk lookup, evacuation lookups, and safe routing internally.
+  - Natural language examples:
+    - `{"message": "check flood risk near me", "lat": 14.6, "lng": 121.0}`
+    - `{"message": "find nearest evacuation center", "lat": 14.6, "lng": 121.0}`
+    - `{"message": "find a safe route to nearest evac", "lat": 14.6, "lng": 121.0, "dest_lat": 14.64, "dest_lng": 121.09}`
+
+- Evacuation center finding
+  - Use `/api/evac-centers/?lat=...&lng=...` to fetch nearest center details and distance ranking.
+  - Handy for first-response triage or quick destination suggestions.
+
+- Evacuation route planning
+  - Use `/api/safe-route/?origin_...&dest_...` to compute a safer route weighted to avoid hazard-prone edges.
+  - Supports route modes like `safe` / `fast` / `safest` while still returning usable path metadata for UI rendering.
+
+- Demo typhoon scenario mode
+  - Reproduce behavior consistently with `weather_mode=demo` and `demo_rainfall` values.
+  - Useful for live demos and offline testing without external weather inputs.
+
 ## Quickstart
 
 ```bash
