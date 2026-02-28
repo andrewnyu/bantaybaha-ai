@@ -41,21 +41,13 @@ let selectedPoint = { ...DEFAULT_COORD };
 let selectedMarker = L.marker([selectedPoint.lat, selectedPoint.lng]).addTo(map);
 let riskCircle = null;
 let routeLine = null;
-let chatUnlocked = false;
-const OPENAI_KEY_STORAGE = "bahawatch-openai-key-v1";
 
-const riskOutput = document.getElementById("riskOutput");
 const chatForm = document.getElementById("chatForm");
 const chatInput = document.getElementById("chatInput");
 const chatLog = document.getElementById("chatLog");
-const chatCard = document.getElementById("chatCard");
-const chatSendBtn = document.getElementById("chatSendBtn");
 const chatSuggestions = document.getElementById("chatSuggestions");
-const openaiKeyInput = document.getElementById("openaiKeyInput");
-const storedOpenAIKey = localStorage.getItem(OPENAI_KEY_STORAGE);
-if (storedOpenAIKey) {
-  openaiKeyInput.value = storedOpenAIKey;
-}
+const chatSendBtn = document.getElementById("chatSendBtn");
+const languageSelect = document.getElementById("languageSelect");
 
 const pointRiskColor = (levelOrScore) => {
   if (typeof levelOrScore === "number") {
@@ -72,90 +64,20 @@ const pointRiskColor = (levelOrScore) => {
 map.on("click", (event) => {
   selectedPoint = event.latlng;
   selectedMarker.setLatLng(event.latlng);
-  if (!chatUnlocked) {
-    riskOutput.textContent = "Point selected. Click Check Flood Risk to continue.";
-  }
+  appendChat("BahaWatch", "Location updated. Ask me what you want next.");
 });
 
-lockChat();
-
-document.getElementById("riskBtn").addEventListener("click", fetchRisk);
 chatForm.addEventListener("submit", submitChat);
 chatSuggestions.addEventListener("click", submitSuggestion);
-openaiKeyInput.addEventListener("change", () => {
-  const keyValue = openaiKeyInput.value.trim();
-  if (keyValue) {
-    localStorage.setItem(OPENAI_KEY_STORAGE, keyValue);
-  } else {
-    localStorage.removeItem(OPENAI_KEY_STORAGE);
-  }
-});
 
-function lockChat() {
-  chatCard.classList.add("locked");
-  chatInput.disabled = true;
-  chatSendBtn.disabled = true;
-  openaiKeyInput.disabled = true;
-  chatSuggestions
-    .querySelectorAll("button")
-    .forEach((button) => (button.disabled = true));
-}
-
-function unlockChat() {
-  if (chatUnlocked) {
-    return;
-  }
-
-  chatUnlocked = true;
-  chatCard.classList.remove("locked");
-  chatInput.disabled = false;
-  chatSendBtn.disabled = false;
-  openaiKeyInput.disabled = false;
-  chatSuggestions
-    .querySelectorAll("button")
-    .forEach((button) => (button.disabled = false));
-}
-
-async function fetchRisk() {
-  const url = `/api/risk/?lat=${selectedPoint.lat}&lng=${selectedPoint.lng}&hours=3`;
-
-  const response = await fetch(url);
-  const data = await response.json();
-  if (!response.ok) {
-    riskOutput.textContent = data.error || "Risk lookup failed.";
-    return;
-  }
-
-  riskOutput.innerHTML = [
-    `<span class="risk-pill">${data.risk_level} • ${data.risk_score}</span>`,
-    `Signals: ${data.explanation.join(", ")}`,
-  ].join("<br/>");
-
-  if (riskCircle) {
-    map.removeLayer(riskCircle);
-  }
-
-  riskCircle = L.circle([selectedPoint.lat, selectedPoint.lng], {
-    radius: 500,
-    color: pointRiskColor(data.risk_level),
-    fillColor: pointRiskColor(data.risk_level),
-    fillOpacity: 0.2,
-  }).addTo(map);
-
-  unlockChat();
-  if (!document.getElementById("chatLog").children.length) {
-    appendChat(
-      "BahaWatch",
-      "Risk checked. You can ask follow-ups or use one of the quick suggestions."
-    );
-  }
-}
+appendChat("BahaWatch", "Ask me anything like check risk, nearest center, or fastest route.");
 
 async function submitSuggestion(event) {
   const button = event.target.closest(".chat-suggestion");
-  if (!button || button.disabled || !chatUnlocked) {
+  if (!button) {
     return;
   }
+
   const message = button.dataset.message?.trim();
   if (!message) {
     return;
@@ -169,7 +91,7 @@ async function submitChat(event, messageOverride) {
   }
 
   const message = (messageOverride ?? chatInput.value).trim();
-  if (!message || !chatUnlocked) {
+  if (!message) {
     return;
   }
 
@@ -184,12 +106,8 @@ async function submitChat(event, messageOverride) {
     message,
     lat: selectedPoint.lat,
     lng: selectedPoint.lng,
+    language: languageSelect.value,
   };
-
-  const openAIKey = openaiKeyInput.value.trim();
-  if (openAIKey) {
-    payload.openai_key = openAIKey;
-  }
 
   const response = await fetch("/api/chat/", {
     method: "POST",
@@ -202,18 +120,39 @@ async function submitChat(event, messageOverride) {
   const data = await response.json();
   if (!response.ok) {
     appendChat("BahaWatch", data.error || "Chat request failed.");
-  } else {
-    const actionText = data.actions_taken && data.actions_taken.length
-      ? `<br/><br/>Actions: ${data.actions_taken.join(", ")}`
-      : "";
-    appendChat("BahaWatch", `${data.reply}${actionText}`);
-    if (data.map_payload && data.map_payload.route) {
+    chatSendBtn.disabled = false;
+    chatInput.focus();
+    return;
+  }
+
+  appendChat("BahaWatch", data.reply || "No response returned.");
+  if (data.map_payload) {
+    if (data.map_payload.type === "route" && data.map_payload.route) {
       renderChatRoute(data.map_payload.route);
+    } else if (data.map_payload.type === "risk") {
+      renderRiskMarker(data.map_payload);
     }
   }
 
   chatSendBtn.disabled = false;
   chatInput.focus();
+}
+
+function renderRiskMarker(payload) {
+  if (!payload || typeof payload.lat !== "number" || typeof payload.lng !== "number") {
+    return;
+  }
+
+  if (riskCircle) {
+    map.removeLayer(riskCircle);
+  }
+
+  riskCircle = L.circle([payload.lat, payload.lng], {
+    radius: 500,
+    color: pointRiskColor(payload.risk_level || payload.risk_score),
+    fillColor: pointRiskColor(payload.risk_level || payload.risk_score),
+    fillOpacity: 0.2,
+  }).addTo(map);
 }
 
 function renderChatRoute(route) {

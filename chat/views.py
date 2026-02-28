@@ -3,7 +3,6 @@ import json
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
-from django.conf import settings
 
 from .tool_router import run_tool_router
 
@@ -25,9 +24,9 @@ def chat_api(request):
         lng = float(payload.get("lng", 120.9842))
         dest_lat = payload.get("dest_lat")
         dest_lng = payload.get("dest_lng")
-        openai_key = payload.get("openai_key", settings.OPENAI_API_KEY)
         dest_lat = float(dest_lat) if dest_lat is not None else None
         dest_lng = float(dest_lng) if dest_lng is not None else None
+        language = payload.get("language", "en")
     except (TypeError, ValueError):
         return JsonResponse(
             {"error": "lat/lng/dest_lat/dest_lng must be numeric when provided"},
@@ -44,7 +43,7 @@ def chat_api(request):
         lng=lng,
         dest_lat=dest_lat,
         dest_lng=dest_lng,
-        openai_key=openai_key,
+        language=language,
         tool_calls=tool_calls,
     )
     return JsonResponse(result)

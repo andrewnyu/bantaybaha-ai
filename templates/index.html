@@ -31,35 +31,34 @@
     </section>
 
     <section class="control-panel">
-      <div class="card google-card">
-        <h2>Flood Risk (1-6h)</h2>
-        <button id="riskBtn" class="action-btn">Check Risk</button>
-        <div id="riskOutput" class="output muted">Select a point, then click Check Flood Risk.</div>
-      </div>
-
-      <div class="card google-card chat-card locked" id="chatCard">
-        <h2>Assistant</h2>
-        <div id="chatUnlockHint" class="muted">Run flood risk first to unlock chat.</div>
+      <div class="card google-card chat-card" id="chatCard">
+        <h2>Flood Assistant</h2>
+        <div class="language-row">
+          <label for="languageSelect">Language</label>
+          <select id="languageSelect">
+            <option value="en">English</option>
+            <option value="tl">Tagalog</option>
+            <option value="ilo">Ilonggo</option>
+          </select>
+        </div>
         <form id="chatForm">
-          <input id="chatInput" type="text" placeholder="Ask for nearest center or routing next." disabled />
-          <button id="chatSendBtn" type="submit" class="send-btn" disabled>Send</button>
+          <input id="chatInput" type="text" placeholder="Ask for check risk, nearest center, safe route..." />
+          <button id="chatSendBtn" type="submit" class="send-btn">Send</button>
         </form>
         <div class="chat-suggestions" id="chatSuggestions">
-          <button type="button" class="chat-suggestion" data-message="Find nearest evacuation center." disabled>
+          <button type="button" class="chat-suggestion" data-message="check risk">
+            Check flood risk
+          </button>
+          <button type="button" class="chat-suggestion" data-message="Find nearest evacuation center.">
             Nearest evacuation center
           </button>
-          <button type="button" class="chat-suggestion" data-message="Show safe route to nearest evacuation center." disabled>
+          <button type="button" class="chat-suggestion" data-message="Show safe route to nearest evacuation center.">
             Safe route to nearest center
           </button>
-          <button type="button" class="chat-suggestion" data-message="Show fastest route to nearest evacuation center." disabled>
+          <button type="button" class="chat-suggestion" data-message="Show fastest route to nearest evacuation center.">
             Fastest route to nearest center
           </button>
         </div>
-        <label for="openaiKeyInput">OpenAI key (optional)</label>
-        <input id="openaiKeyInput" type="password" placeholder="Paste API key to enable the AI-backed flow" disabled />
-        {% if has_openai_key %}
-          <p class="map-note">Server OpenAI key is already configured.</p>
-        {% endif %}
         <div id="chatLog" class="chat-log"></div>
       </div>
     </section>

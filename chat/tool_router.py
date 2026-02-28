@@ -108,13 +108,98 @@ def _plan_actions(payload: list[dict]) -> list[str]:
     return [item.get("tool") for item in payload]
 
 
+def _normalize_language(language: str | None) -> str:
+    language = (language or "en").lower().strip()
+    return language if language in {"en", "tl", "ilo"} else "en"
+
+
+def _build_conversational_reply(tool_results: dict[str, Any], language: str) -> str:
+    lang = _normalize_language(language)
+
+    if lang == "tl":
+        risk_label = "Panganib"
+        upstream_label = "Bagay sa tubig-ulan sa itaas na bahagi"
+        evac_label = "Pinakamalapit na evacuation center"
+        route_label = "Ruta"
+        no_data = "Naka-assemble ako ng sagot, pero mukhang kulang ang data para sa query na ito."
+        default_action = (
+            "Maaari kong kunin ang risk, upstream rainfall signals, "
+            "evacuation centers, at mga ruta. Subukan ang: "
+            "\"check risk\", \"find nearest evacuation center\", o \"safe route to nearest evacuation center\"."
+        )
+        units_km = "km"
+    elif lang == "ilo":
+        risk_label = "Peligro"
+        upstream_label = "Pagsulod sang ulan sa pinutikan"
+        evac_label = "Pinakadaku nga evacuation center nga duul"
+        route_label = "Ruta"
+        no_data = "Nakuha ko ang resulta pero daw kulang ang data para sa imo pangabay."
+        default_action = (
+            "Maka-check ako sang risk, upstream signals, evacuation centers, kag mga ruta. "
+            "Pwede mo i-sabi: \"check risk\", \"find nearest evacuation center\", o \"safe route to nearest evacuation center\"."
+        )
+        units_km = "km"
+    else:
+        risk_label = "Flood risk"
+        upstream_label = "Upstream rainfall signal"
+        evac_label = "Nearest evacuation center"
+        route_label = "Route"
+        no_data = "I did everything I can, but this query did not return enough data."
+        default_action = (
+            "I can check flood risk, upstream signals, evacuation centers, and route options. "
+            'Try: "check risk", "find nearest evacuation center", or "safe route to nearest evacuation center".'
+        )
+        units_km = "km"
+
+    if not tool_results:
+        return default_action
+
+    lines = []
+    if "risk" in tool_results:
+        risk_payload = tool_results["risk"]
+        lines.append(
+            f"{risk_label}: {risk_payload['risk_level']} ({risk_payload['risk_score']}/100)"
+        )
+        explanations = risk_payload.get("explanation")
+        if explanations:
+            lines.append("Signals: " + ", ".join(explanations))
+
+    if "upstream" in tool_results:
+        up = tool_results["upstream"]
+        peak = up.get("expected_peak_in_hours")
+        peak_text = f"~{peak}h" if peak is not None else "n/a"
+        lines.append(
+            f"{upstream_label}: {up['upstream_rain_index']} (normalized {up['upstream_rain_index_norm']}), "
+            f"possible impact in {peak_text}."
+        )
+
+    if "evac" in tool_results:
+        if tool_results["evac"]:
+            first = tool_results["evac"][0]
+            lines.append(
+                f"{evac_label}: {first['name']} - {first['distance_km']} {units_km} away."
+            )
+
+    if "route" in tool_results:
+        route = tool_results["route"]
+        lines.append(
+            f"{route_label}: {route['total_distance']} {units_km}, "
+            f"hazard exposure {route['hazard_exposure']}."
+        )
+
+    if not lines:
+        return no_data
+
+    return " ".join(lines)
+
+
 def run_tool_router(
     message: str,
     lat: float,
     lng: float,
     dest_lat: float | None = None,
     dest_lng: float | None = None,
-    openai_key: str | None = None,
+    language: str | None = "en",
     tool_calls: list[dict] | None = None,
 ) -> dict:
     lat_lng_pairs = parse_coordinate_pairs(message)
@@ -125,8 +210,6 @@ def run_tool_router(
 
     default_hours = 3
     requested_hours = 3
-    _ = openai_key
-
     if tool_calls is None:
         tool_calls = _build_tool_plan(message, requested_hours, dest_lat is not None and dest_lng is not None)
 
@@ -192,40 +275,6 @@ def run_tool_router(
         else:
             continue
 
-    parts = []
-    if "risk" in tool_results:
-        risk_payload = tool_results["risk"]
-        parts.append(
-            f"Risk: {risk_payload['risk_level']} ({risk_payload['risk_score']}/100)."
-        )
-
-    if "upstream" in tool_results:
-        up = tool_results["upstream"]
-        peak = up.get("expected_peak_in_hours")
-        top = up.get("dominant_upstream_points") or []
-        if top:
-            peak_text = f"~{peak} hours" if peak is not None else "unknown"
-            parts.append(
-                f"Upstream rainfall index: {up['upstream_rain_index']} (normalized {up['upstream_rain_index_norm']}). "
-                f"Heavy rainfall detected upstream in watershed, likely to impact downstream in {peak_text}."
-            )
-
-    if "evac" in tool_results:
-        if tool_results["evac"]:
-            first = tool_results["evac"][0]
-            parts.append(
-                f"Suggested evacuation center: {first['name']} at {first['distance_km']} km away."
-            )
-
-    if "route" in tool_results:
-        route = tool_results["route"]
-        parts.append(
-            f"Safe route distance {route['total_distance']} km, hazard exposure {route['hazard_exposure']}."
-        )
-
-    if not parts:
-        parts.append("I can check risk, downstream upstream signals, evacuation centers, and route options.")
-
     map_payload: dict[str, Any] | None = None
     if "route" in tool_results:
         route = tool_results["route"]
@@ -234,10 +283,20 @@ def run_tool_router(
             "origin_node": route.get("origin_node"),
             "destination_node": route.get("destination_node"),
             "mode": route.get("mode", "safest"),
+            "type": "route",
+        }
+    elif "risk" in tool_results:
+        risk_payload = tool_results["risk"]
+        map_payload = {
+            "lat": lat,
+            "lng": lng,
+            "risk_level": risk_payload["risk_level"],
+            "risk_score": risk_payload["risk_score"],
+            "type": "risk",
         }
 
     return {
-        "reply": " ".join(parts),
+        "reply": _build_conversational_reply(tool_results, language),
         "actions_taken": _plan_actions(tool_outputs),
         "tools_called": _plan_actions(tool_outputs),
         "tool_outputs": tool_outputs,
