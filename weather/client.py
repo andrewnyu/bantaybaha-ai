@@ -28,6 +28,72 @@ def _demo_rainfall_cache_key(demo_rainfall: list[float] | None) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
 
 
+def _normalize_node_key(lat: float | str, lng: float | str) -> str:
+    return f"{round(float(lat), 5)},{round(float(lng), 5)}"
+
+
+def parse_demo_upstream_rainfall(raw_demo_rainfall: object) -> dict[str, list[float]]:
+    if raw_demo_rainfall is None:
+        return {}
+
+    parsed_payload = raw_demo_rainfall
+    if isinstance(raw_demo_rainfall, str):
+        normalized = raw_demo_rainfall.strip()
+        if not normalized:
+            return {}
+
+        try:
+            parsed_payload = json.loads(normalized)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                "demo_upstream_rainfall must be a JSON object or array."
+            ) from exc
+    elif isinstance(raw_demo_rainfall, dict):
+        parsed_payload = raw_demo_rainfall
+    elif isinstance(raw_demo_rainfall, (list, tuple)):
+        parsed_payload = list(raw_demo_rainfall)
+    else:
+        raise ValueError("demo_upstream_rainfall must be a JSON array/object.")
+
+    upstream_map: dict[str, list[float]] = {}
+
+    if isinstance(parsed_payload, dict):
+        for raw_key, item in parsed_payload.items():
+            if not isinstance(raw_key, str) or "," not in raw_key:
+                raise ValueError(
+                    "demo_upstream_rainfall object keys must be 'lat,lng' strings."
+                )
+
+            raw_lat, raw_lng = raw_key.split(",", 1)
+            key = _normalize_node_key(raw_lat, raw_lng)
+            values = parse_demo_rainfall_values(item)
+            upstream_map[key] = values
+        return upstream_map
+
+    if not isinstance(parsed_payload, list):
+        raise ValueError("demo_upstream_rainfall must be a JSON array or lat/lng map.")
+
+    for index, item in enumerate(parsed_payload):
+        if not isinstance(item, dict):
+            raise ValueError("Each demo_upstream_rainfall entry must be an object.")
+
+        lat = item.get("lat")
+        lng = item.get("lng")
+        if lat is None or lng is None:
+            raise ValueError(
+                "Each demo_upstream_rainfall entry requires lat and lng coordinates."
+            )
+        rainfall = (
+            item.get("demo_rainfall")
+            if item.get("demo_rainfall") is not None
+            else item.get("rainfall")
+        )
+        key = _normalize_node_key(lat, lng)
+        upstream_map[key] = parse_demo_rainfall_values(rainfall)
+
+    return upstream_map
+
+
 def _hourly_cache_key(
     lat: float,
     lng: float,

@@ -214,6 +214,18 @@ input[type="number"] {
   background: #fff;
 }
 
+textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.56rem;
+  margin-top: 0.45rem;
+  font: inherit;
+  background: #fff;
+  min-height: 7.4rem;
+  resize: vertical;
+}
+
 button,
 .action-btn,
 .send-btn {
@@ -249,6 +261,12 @@ button.secondary-btn:hover,
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.4rem;
+}
+
+.settings-inline-actions {
+  display: inline-flex;
+  gap: 0.45rem;
+  align-items: center;
 }
 
 .settings-toggle {

@@ -22,6 +22,8 @@ const demoWeatherToggle = document.getElementById("demoWeatherToggle");
 const demoRainfallInput = document.getElementById("demoRainfallInput");
 const demoHoursInput = document.getElementById("demoHoursInput");
 const demoWeatherContext = document.getElementById("demoWeatherContext");
+const demoUpstreamWeatherInput = document.getElementById("demoUpstreamWeatherInput");
+const generateUpstreamNodesBtn = document.getElementById("generateUpstreamNodesBtn");
 const clearDemoRainfallBtn = document.getElementById("clearDemoRainfallBtn");
 const weatherSourceStatus = document.getElementById("weatherSourceStatus");
 const tabLinks = document.querySelectorAll(".tab-link");
@@ -44,6 +46,7 @@ let reverseLookupRequestId = 0;
 let weatherSettings = {
   demoModeEnabled: false,
   demoRainfall: "10,22,45,30,12,5",
+  demoUpstreamWeather: "",
   forecastHours: 3,
 };
 
@@ -105,6 +108,9 @@ const loadWeatherSettings = () => {
     if (typeof parsed.demoRainfall === "string") {
       weatherSettings.demoRainfall = parsed.demoRainfall;
     }
+    if (typeof parsed.demoUpstreamWeather === "string") {
+      weatherSettings.demoUpstreamWeather = parsed.demoUpstreamWeather;
+    }
     if (Number.isFinite(parsed.forecastHours)) {
       weatherSettings.forecastHours = Math.min(6, Math.max(1, Number(parsed.forecastHours)));
     }
@@ -151,6 +157,56 @@ const parseDemoRainfallValues = (value) => {
   }
 
   return values.slice(0, 6).map((v) => Number(v.toFixed(1)));
+};
+
+const normalizeDemoUpstreamNodeKey = (lat, lng) => {
+  const latValue = Number(lat);
+  const lngValue = Number(lng);
+  if (!Number.isFinite(latValue) || !Number.isFinite(lngValue)) {
+    return "";
+  }
+  return `${latValue.toFixed(5)},${lngValue.toFixed(5)}`;
+};
+
+const parseDemoUpstreamWeather = (value) => {
+  const raw = (value || "").trim();
+  if (!raw) {
+    return [];
+  }
+
+  let parsed = [];
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    throw new Error("Demo upstream weather must be valid JSON.");
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error("Demo upstream weather must be an array of objects.");
+  }
+
+  const cleaned = [];
+  for (const entry of parsed) {
+    if (!entry || typeof entry !== "object") {
+      throw new Error("Each upstream weather entry must be an object.");
+    }
+
+    const lat = Number(entry.lat);
+    const lng = Number(entry.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      throw new Error("Each upstream weather entry must include valid lat/lng.");
+    }
+
+    const rawRainfall = entry.demo_rainfall ?? entry.rainfall ?? entry.values ?? [];
+    const parsedRainfall = parseDemoRainfallValues(rawRainfall);
+    cleaned.push({
+      lat,
+      lng,
+      demo_rainfall: parsedRainfall,
+    });
+  }
+
+  return cleaned;
 };
 
 const formatRainfallPreview = (values) => {
@@ -223,6 +279,15 @@ const syncWeatherSettingsUI = () => {
     if (demoRainfallInput.value !== weatherSettings.demoRainfall) {
       demoRainfallInput.value = weatherSettings.demoRainfall;
     }
+  }
+  if (demoUpstreamWeatherInput) {
+    demoUpstreamWeatherInput.disabled = !Boolean(weatherSettings.demoModeEnabled);
+    if (demoUpstreamWeatherInput.value !== weatherSettings.demoUpstreamWeather) {
+      demoUpstreamWeatherInput.value = weatherSettings.demoUpstreamWeather;
+    }
+  }
+  if (generateUpstreamNodesBtn) {
+    generateUpstreamNodesBtn.disabled = !Boolean(weatherSettings.demoModeEnabled);
   }
   if (clearDemoRainfallBtn) {
     clearDemoRainfallBtn.disabled = !Boolean(weatherSettings.demoModeEnabled);
@@ -329,6 +394,87 @@ const resolveReverseAddress = async (lat, lng, requestId) => {
     addStatusFlag("Could not resolve address for this location.", "warn");
     updateSelectedLocationLabel();
     updateDemoContextText();
+  }
+};
+
+const generateUpstreamNodePayloadFromRisk = async () => {
+  if (!generateUpstreamNodesBtn) {
+    return;
+  }
+
+  if (!demoWeatherToggle?.checked) {
+    addStatusFlag("Enable demo mode before generating upstream nodes.", "warn");
+    return;
+  }
+
+  const hours = parseDemoHours(weatherSettings.forecastHours, 3);
+  generateUpstreamNodesBtn.disabled = true;
+
+  let baselineRainfall = [];
+  try {
+    baselineRainfall = parseDemoRainfallValues(demoRainfallInput?.value);
+  } catch (error) {
+    addStatusFlag(error.message || "Invalid demo rainfall values.", "error");
+    generateUpstreamNodesBtn.disabled = false;
+    return;
+  }
+
+  const params = new URLSearchParams({
+    lat: String(selectedPoint.lat),
+    lng: String(selectedPoint.lng),
+    hours: String(hours),
+    weather_mode: "demo",
+    demo_rainfall: baselineRainfall.join(","),
+  });
+
+  try {
+    const response = await fetch(`/api/risk/?${params.toString()}`);
+    const data = await response.json();
+    if (!response.ok) {
+      addStatusFlag(data.error || "Could not generate upstream nodes.", "error");
+      return;
+    }
+
+    const nodes = data?.upstream_summary?.dominant_upstream_points;
+    if (!Array.isArray(nodes) || nodes.length === 0) {
+      addStatusFlag("No upstream nodes returned for this location.", "warn");
+      return;
+    }
+
+    let currentOverrides = [];
+    try {
+      currentOverrides = parseDemoUpstreamWeather(weatherSettings.demoUpstreamWeather);
+    } catch (error) {
+      currentOverrides = [];
+    }
+    const overrideMap = new Map();
+    currentOverrides.forEach((item) => {
+      overrideMap.set(
+        normalizeDemoUpstreamNodeKey(item.lat, item.lng),
+        item.demo_rainfall ?? []
+      );
+    });
+
+    const generated = nodes.map((node) => {
+      const key = normalizeDemoUpstreamNodeKey(node.lat, node.lng);
+      return {
+        lat: Number(node.lat),
+        lng: Number(node.lng),
+        demo_rainfall: overrideMap.get(key) || [],
+      };
+    });
+
+    weatherSettings.demoUpstreamWeather = JSON.stringify(generated, null, 2);
+    saveWeatherSettings();
+    syncWeatherSettingsUI();
+    addStatusFlag(
+      `Generated ${generated.length} upstream nodes. Add per-node rainfall in JSON above.`,
+      "warn"
+    );
+  } catch (error) {
+    addStatusFlag("Failed to fetch upstream nodes for demo override.", "error");
+  } finally {
+    generateUpstreamNodesBtn.disabled = !Boolean(weatherSettings.demoModeEnabled);
   }
 };
 
@@ -516,9 +662,21 @@ if (demoHoursInput) {
   });
 }
 
+if (generateUpstreamNodesBtn) {
+  generateUpstreamNodesBtn.addEventListener("click", generateUpstreamNodePayloadFromRisk);
+}
+
+if (demoUpstreamWeatherInput) {
+  demoUpstreamWeatherInput.addEventListener("input", () => {
+    weatherSettings.demoUpstreamWeather = demoUpstreamWeatherInput.value;
+    saveWeatherSettings();
+  });
+}
+
 if (clearDemoRainfallBtn) {
   clearDemoRainfallBtn.addEventListener("click", () => {
     weatherSettings.demoRainfall = "";
+    weatherSettings.demoUpstreamWeather = "";
     weatherSettings.demoModeEnabled = true;
     saveWeatherSettings();
     syncWeatherSettingsUI();
@@ -658,10 +816,16 @@ async function submitChat(event, messageOverride) {
   if (demoWeatherToggle?.checked) {
     try {
       payload.demo_rainfall = parseDemoRainfallValues(demoRainfallInput?.value);
+      payload.demo_upstream_rainfall = parseDemoUpstreamWeather(
+        demoUpstreamWeatherInput?.value
+      );
     } catch (error) {
       addStatusFlag(error.message || "Invalid demo rainfall values.", "error");
       chatSendBtn.disabled = false;
       return;
+    }
+    if (Array.isArray(payload.demo_upstream_rainfall) && payload.demo_upstream_rainfall.length === 0) {
+      delete payload.demo_upstream_rainfall;
     }
   } else {
     payload.demo_rainfall = [];

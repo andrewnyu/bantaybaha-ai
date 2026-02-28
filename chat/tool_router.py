@@ -289,6 +289,7 @@ def tool_get_risk(
     hours: int = 3,
     weather_mode: str = "live",
     demo_rainfall: list[float] | None = None,
+    demo_upstream_rainfall: dict[str, list[float]] | None = None,
 ) -> dict:
     payload = estimate_flood_risk(
         lat=lat,
@@ -296,6 +297,7 @@ def tool_get_risk(
         hours=hours,
         weather_mode=weather_mode,
         demo_rainfall=demo_rainfall,
+        demo_upstream_rainfall=demo_upstream_rainfall,
     )
     return {
         "tool": "tool_get_risk",
@@ -309,6 +311,7 @@ def tool_get_upstream_summary(
     hours: int = 3,
     weather_mode: str = "live",
     demo_rainfall: list[float] | None = None,
+    demo_upstream_rainfall: dict[str, list[float]] | None = None,
 ) -> dict:
     payload = compute_upstream_rain_index(
         lat=lat,
@@ -316,6 +319,7 @@ def tool_get_upstream_summary(
         horizon_hours=hours,
         weather_mode=weather_mode,
         demo_rainfall=demo_rainfall,
+        demo_upstream_rainfall=demo_upstream_rainfall,
     )
     return {
         "tool": "tool_get_upstream_summary",
@@ -355,6 +359,7 @@ def tool_get_safe_route(
     mode: str = "safest",
     weather_mode: str = "live",
     demo_rainfall: list[float] | None = None,
+    demo_upstream_rainfall: dict[str, list[float]] | None = None,
 ) -> dict:
     safety_weight = 2.0 if mode in {"safe", "safest"} else 0.0
     payload = compute_safe_route(
@@ -366,6 +371,7 @@ def tool_get_safe_route(
         safety_weight=safety_weight,
         weather_mode=weather_mode,
         demo_rainfall=demo_rainfall,
+        demo_upstream_rainfall=demo_upstream_rainfall,
     )
     payload["mode"] = "safest" if safety_weight > 0 else "fastest"
     return {
@@ -798,6 +804,7 @@ def run_tool_router(
     weather_mode: str = "live",
     hours: int = 3,
     demo_rainfall: list[float] | None = None,
+    demo_upstream_rainfall: dict[str, list[float]] | None = None,
 ) -> dict:
     lat_lng_pairs = parse_coordinate_pairs(message)
     if lat_lng_pairs:
@@ -847,6 +854,7 @@ def run_tool_router(
                 hours=hours,
                 weather_mode=weather_mode,
                 demo_rainfall=demo_rainfall,
+                demo_upstream_rainfall=demo_upstream_rainfall,
             )
             tool_outputs.append(tool_output)
             tool_results["risk"] = tool_output["result"]
@@ -857,6 +865,7 @@ def run_tool_router(
                     hours=hours,
                     weather_mode=weather_mode,
                     demo_rainfall=demo_rainfall,
+                    demo_upstream_rainfall=demo_upstream_rainfall,
                 )
                 tool_outputs.append(upstream_output)
                 tool_results["upstream"] = upstream_output["result"]
@@ -869,6 +878,7 @@ def run_tool_router(
                 hours=hours,
                 weather_mode=weather_mode,
                 demo_rainfall=demo_rainfall,
+                demo_upstream_rainfall=demo_upstream_rainfall,
             )
             tool_outputs.append(tool_output)
             tool_results["upstream"] = tool_output["result"]
@@ -923,6 +933,7 @@ def run_tool_router(
                 hours=route_hours,
                 weather_mode=weather_mode,
                 demo_rainfall=demo_rainfall,
+                demo_upstream_rainfall=demo_upstream_rainfall,
             )
             route_payload["result"]["route_summary"] = _build_route_landmark_summary(
                 route_payload["result"],

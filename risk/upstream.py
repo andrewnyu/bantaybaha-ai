@@ -65,8 +65,14 @@ def compute_upstream_rain_index(
     weather_mode: str = "live",
     reference_time: str | int | float | None = None,
     demo_rainfall: object | None = None,
+    demo_upstream_rainfall: dict[str, list[float]] | None = None,
 ) -> dict:
     horizon_hours = int(clamp(horizon_hours, 1, 6))
+    upstream_rain_override = demo_upstream_rainfall or {}
+
+    if not isinstance(upstream_rain_override, dict):
+        upstream_rain_override = {}
+
     river_graph = _load_river_graph()
     if river_graph is None or river_graph.number_of_nodes() == 0:
         return {
@@ -107,13 +113,16 @@ def compute_upstream_rain_index(
         if node_lat is None or node_lng is None:
             continue
 
+        node_key = f"{round(float(node_lat), 5)},{round(float(node_lng), 5)}"
+        node_demo_rainfall = upstream_rain_override.get(node_key, demo_rainfall)
+
         rain_total = get_hourly_rain_sum(
             node_lat,
             node_lng,
             horizon_hours,
             weather_mode=weather_mode,
             reference_time=reference_time,
-            demo_rainfall=demo_rainfall,
+            demo_rainfall=node_demo_rainfall,
         )
         distance = float(distance_m)
         weight = math.exp(-distance / DECAY_DISTANCE_M)
@@ -128,6 +137,7 @@ def compute_upstream_rain_index(
                 "rain_sum": rain_total,
                 "weighted_signal": round(weighted_signal, 3),
                 "node_id": str(node_id),
+                "has_demo_override": node_key in upstream_rain_override,
             }
         )
 

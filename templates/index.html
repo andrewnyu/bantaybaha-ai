@@ -84,7 +84,12 @@
               <input id="demoWeatherToggle" type="checkbox" />
               Enable demo weather mode
             </label>
-            <button id="clearDemoRainfallBtn" type="button" class="secondary-btn">Clear</button>
+            <div class="settings-inline-actions">
+              <button id="generateUpstreamNodesBtn" type="button" class="secondary-btn">
+                Generate upstream nodes
+              </button>
+              <button id="clearDemoRainfallBtn" type="button" class="secondary-btn">Clear</button>
+            </div>
           </div>
           <label class="muted" for="demoHoursInput">Forecast window (hours)</label>
           <input
@@ -107,6 +112,17 @@
           <p class="muted settings-helper">
             Enter up to 6 hourly rainfall values. Missing hours are padded with 0.
             Empty input uses all zeros.
+          </p>
+          <label class="muted" for="demoUpstreamWeatherInput">
+            Upstream node weather (optional)
+          </label>
+          <textarea
+            id="demoUpstreamWeatherInput"
+            rows="5"
+            placeholder='[{"lat": 9.12345, "lng": 122.56789, "demo_rainfall": "50,40,30"}]'
+          ></textarea>
+          <p class="muted settings-helper">
+            Use JSON array of upstream nodes and rainfall. Leave blank for shared global demo rainfall.
           </p>
           <p id="weatherSourceStatus" class="settings-source-status muted">Current source: live OpenWeather forecast</p>
         </div>

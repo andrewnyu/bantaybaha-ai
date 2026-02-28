@@ -247,6 +247,7 @@ def estimate_flood_risk(
     weather_mode: str = "live",
     reference_time: str | int | float | None = None,
     demo_rainfall: object | None = None,
+    demo_upstream_rainfall: dict[str, list[float]] | None = None,
 ) -> dict:
     safe_hours = int(clamp(hours, 1, 6))
 
@@ -271,6 +272,7 @@ def estimate_flood_risk(
         weather_mode=weather_mode,
         reference_time=reference_time,
         demo_rainfall=demo_rainfall,
+        demo_upstream_rainfall=demo_upstream_rainfall,
     )
     upstream_norm = upstream["upstream_rain_index_norm"]
 

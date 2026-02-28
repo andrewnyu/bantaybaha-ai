@@ -48,6 +48,7 @@ Both `/api/risk/` and `/api/safe-route/` support a demo scenario flow by adding:
 
 - `weather_mode=demo`
 - `demo_rainfall` as a comma list or JSON array
+- `demo_upstream_rainfall` as a JSON array for per-node overrides in demo mode (optional)
 
 Examples:
 
@@ -60,6 +61,8 @@ Safe-route demo example:
 
 ```bash
 curl "http://127.0.0.1:8000/api/safe-route/?origin_lat=14.60&origin_lng=121.00&dest_lat=14.64&dest_lng=121.09&hours=4&mode=safest&weather_mode=demo&demo_rainfall=80,90,75,40,10,0"
+
+curl "http://127.0.0.1:8000/api/risk/?lat=14.60&lng=121.00&hours=6&weather_mode=demo&demo_rainfall=80,90,75,40,10,0&demo_upstream_rainfall=[{\"lat\":14.6001,\"lng\":121.0002,\"demo_rainfall\":[50,40,30]}]"
 ```
 
 Live mode (default) remains unchanged:
@@ -76,6 +79,7 @@ In the chat UI, open Settings → enable Demo Mode, then enter values like `10,2
   "lat": 14.60,
   "lng": 121.00,
   "weather_mode": "demo",
-  "demo_rainfall": [10, 22, 45, 30, 12, 5]
+  "demo_rainfall": [10, 22, 45, 30, 12, 5],
+  "demo_upstream_rainfall": [{"lat":14.6001,"lng":121.0002,"demo_rainfall":[50,40,30]}]
 }
 ```

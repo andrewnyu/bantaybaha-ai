@@ -3,7 +3,7 @@ from django.views.decorators.http import require_GET
 
 from .risk_engine import estimate_flood_risk
 from .risk_area import build_risk_area_payload
-from weather.client import parse_demo_rainfall_values, parse_reference_time
+from weather.client import parse_demo_rainfall_values, parse_demo_upstream_rainfall, parse_reference_time
 
 
 def _normalize_weather_mode(raw_mode: str | None) -> str:
@@ -26,6 +26,7 @@ def risk_api(request):
     reference_time = request.GET.get("reference_time")
     demo_rainfall_raw = request.GET.get("demo_rainfall")
     demo_rainfall: list[float] | None = None
+    demo_upstream_rainfall: dict[str, list[float]] = {}
 
     if lat is None or lng is None:
         return JsonResponse({"error": "lat and lng are required"}, status=400)
@@ -53,6 +54,9 @@ def risk_api(request):
     elif weather_mode == "demo":
         try:
             demo_rainfall = parse_demo_rainfall_values(demo_rainfall_raw)
+            demo_upstream_rainfall = parse_demo_upstream_rainfall(
+                request.GET.get("demo_upstream_rainfall")
+            )
         except ValueError as exc:
             return JsonResponse({"error": str(exc)}, status=400)
 
@@ -71,6 +75,7 @@ def risk_api(request):
         weather_mode=weather_mode,
         reference_time=reference_epoch,
         demo_rainfall=demo_rainfall,
+        demo_upstream_rainfall=demo_upstream_rainfall,
     )
     return JsonResponse(payload)
 

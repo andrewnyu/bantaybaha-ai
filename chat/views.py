@@ -3,7 +3,7 @@ import json
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
-from weather.client import parse_demo_rainfall_values
+from weather.client import parse_demo_rainfall_values, parse_demo_upstream_rainfall
 
 from .tool_router import run_tool_router
 
@@ -50,6 +50,7 @@ def chat_api(request):
         forecast_hours = _normalize_hours(payload.get("hours", 3), 3)
         weather_mode = _normalize_weather_mode(payload.get("weather_mode"))
         demo_rainfall_raw = payload.get("demo_rainfall")
+        demo_upstream_rainfall_raw = payload.get("demo_upstream_rainfall")
     except (TypeError, ValueError):
         return JsonResponse(
             {"error": "lat/lng/dest_lat/dest_lng must be numeric when provided"},
@@ -57,9 +58,13 @@ def chat_api(request):
         )
 
     demo_rainfall = None
+    demo_upstream_rainfall = None
     if weather_mode == "demo":
         try:
             demo_rainfall = parse_demo_rainfall_values(demo_rainfall_raw)
+            demo_upstream_rainfall = parse_demo_upstream_rainfall(
+                demo_upstream_rainfall_raw
+            )
         except ValueError as exc:
             return JsonResponse({"error": str(exc)}, status=400)
 
@@ -81,5 +86,6 @@ def chat_api(request):
         chat_history=chat_history,
         weather_mode=weather_mode if weather_mode in {"live", "demo"} else "live",
         demo_rainfall=demo_rainfall,
+        demo_upstream_rainfall=demo_upstream_rainfall,
     )
     return JsonResponse(result)

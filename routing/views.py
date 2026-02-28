@@ -1,6 +1,10 @@
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET
-from weather.client import parse_demo_rainfall_values, parse_reference_time
+from weather.client import (
+    parse_demo_rainfall_values,
+    parse_demo_upstream_rainfall,
+    parse_reference_time,
+)
 
 from .routing_engine import compute_safe_route
 
@@ -28,6 +32,7 @@ def safe_route_api(request):
         reference_time = request.GET.get("reference_time")
         demo_rainfall_raw = request.GET.get("demo_rainfall")
         demo_rainfall = None
+        demo_upstream_rainfall: dict[str, list[float]] = {}
     except (TypeError, ValueError):
         return JsonResponse(
             {
@@ -51,6 +56,9 @@ def safe_route_api(request):
     elif weather_mode == "demo":
         try:
             demo_rainfall = parse_demo_rainfall_values(demo_rainfall_raw)
+            demo_upstream_rainfall = parse_demo_upstream_rainfall(
+                request.GET.get("demo_upstream_rainfall")
+            )
         except ValueError as exc:
             return JsonResponse({"error": str(exc)}, status=400)
         reference_epoch = None
@@ -79,6 +87,7 @@ def safe_route_api(request):
             weather_mode=weather_mode,
             reference_time=reference_epoch,
             demo_rainfall=demo_rainfall,
+            demo_upstream_rainfall=demo_upstream_rainfall,
         )
     except Exception as exc:
         return JsonResponse({"error": str(exc)}, status=500)
