@@ -84,7 +84,7 @@ body {
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+  grid-template-columns: 1fr 1fr;
   gap: 1rem;
   padding: 1rem;
   align-items: start;
