@@ -15,10 +15,12 @@ PROJECT_DATA_DIR = PROJECT_ROOT / "data"
 RISK_POLYGON_FALLBACK = RISK_DATA_DIR / "flood_zones.geojson"
 NEGROS_RIVERS_PATH = NEGROS_DATA_DIR / "negros_rivers.geojson"
 RIVER_SAMPLE_POINTS_PATH = PROJECT_DATA_DIR / "river_sample_points.json"
+NEGROS_ROAD_GRAPH_PATH = PROJECT_DATA_DIR / "negros_graph.graphml"
 NEGROS_DEM_PATH = NEGROS_DATA_DIR / "negros_dem.tif"
 OPEN_ELEVATION_URL = "https://api.open-elevation.com/api/v1/lookup"
 OPEN_ELEVATION_TIMEOUT_SECONDS = 5
 RIVER_METRIC_CRS = "EPSG:3857"
+_MISSING_RIVER_DISTANCE_WARNED = False
 
 
 def clamp(value: float, min_value: float, max_value: float) -> float:
@@ -83,7 +85,30 @@ def _load_river_points_fallback() -> list[tuple[float, float]]:
             continue
         return [(item.get("lat"), item.get("lng")) for item in points if item.get("lat") is not None and item.get("lng") is not None]
 
-    return []
+    return _load_river_proxy_points_from_graph()
+
+
+def _load_river_proxy_points_from_graph(limit: int = 320) -> list[tuple[float, float]]:
+    if not NEGROS_ROAD_GRAPH_PATH.exists():
+        return []
+
+    try:
+        import osmnx as ox
+        graph = ox.load_graphml(NEGROS_ROAD_GRAPH_PATH)
+    except Exception:
+        return []
+
+    points: list[tuple[float, float]] = []
+    for _, attrs in graph.nodes(data=True):
+        node_lat = attrs.get("y")
+        node_lng = attrs.get("x")
+        if node_lat is None or node_lng is None:
+            continue
+        points.append((float(node_lat), float(node_lng)))
+        if len(points) >= limit:
+            break
+
+    return points
 
 
 def get_forecast_rainfall_sum_mm(lat: float, lng: float, hours: int) -> float:
@@ -153,7 +178,13 @@ def distance_to_nearest_river_km(lat: float, lng: float) -> float:
 
     fallback_points = _load_river_points_fallback()
     if not fallback_points:
-        print("No river dataset available (Negros GeoJSON or sample points); river distance fallback returned 999 km.")
+        global _MISSING_RIVER_DISTANCE_WARNED
+        if not _MISSING_RIVER_DISTANCE_WARNED:
+            print(
+                "No river dataset available (Negros GeoJSON/sample points/road graph); "
+                "river distance fallback returned 999 km."
+            )
+            _MISSING_RIVER_DISTANCE_WARNED = True
         return 999.0
 
     distances = [haversine_km(lat, lng, r_lat, r_lng) for r_lat, r_lng in fallback_points]
