@@ -7,5 +7,6 @@
 /data/negros_river_graph.gpickle
 /data/negros_rivers.geojson
 /data/river_sample_points.json
+cache/
 __pycache__/
 db.sqlite3
