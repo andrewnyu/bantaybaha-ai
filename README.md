@@ -16,6 +16,23 @@ python manage.py migrate
 python manage.py runserver
 ```
 
+### Generate Negros Data (required for accurate area/risk maps)
+
+The following files are stored locally and excluded from git by `.gitignore`:
+
+- `data/negros_graph.graphml`
+- `data/negros_rivers.geojson`
+- `data/river_sample_points.json`
+- `data/negros_river_graph.gpickle`
+
+Run once (or whenever files are deleted):
+
+```bash
+source .venv/bin/activate
+python scripts/load_negros_roads.py
+python scripts/build_river_graph.py
+```
+
 Open `http://127.0.0.1:8000/`.
 
 ## API Endpoints
