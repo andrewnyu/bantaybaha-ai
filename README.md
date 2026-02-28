@@ -1,5 +1,3 @@
-![Bantay Baha AI Logo](./bantay-baha-ai-logo.png)
-
 # Bantay Baha AI MVP (Django)
 
 Minimal hackathon MVP for:
@@ -7,7 +5,7 @@ Minimal hackathon MVP for:
 - nearest evacuation center lookup
 - safer routing around flood-prone zones
 - rule-based chat endpoint that orchestrates all key tools and can answer flood Q&A
-- local-language interaction for residents and responders (English + Tagalog/Visayan intent handling)
+- local-language interaction for residents and responders (English + Tagalog + Local languages in Negros Island (Hiligaynon / Cebuano) intent handling)
 - OpenAI API-backed chat responses using structured tool outputs
 
 The assistant can:
@@ -95,3 +93,7 @@ In the chat UI, open Settings → enable Demo Mode, then enter values like `10,2
   "demo_upstream_rainfall": [{"lat":14.6001,"lng":121.0002,"demo_rainfall":[50,40,30]}]
 }
 ```
+
+<p align="center">
+  <img src="./bantay-baha-ai-logo.png" alt="Bantay Baha AI Logo" style="max-width: 35%; width: auto; height: auto;" />
+</p>
