@@ -294,6 +294,24 @@ button.secondary-btn:hover,
   font-size: 0.78rem;
 }
 
+.settings-source-status.status-info {
+  background: #eef5ff;
+  border-color: #d5dff0;
+  color: #1f4f7b;
+}
+
+.settings-source-status.status-warn {
+  background: #fff4ce;
+  border-color: #f4cd5b;
+  color: #8a5b00;
+}
+
+.settings-source-status.status-error {
+  background: #fde7e5;
+  border-color: #f28b82;
+  color: #8f1f11;
+}
+
 .demo-context {
   margin: 0.2rem 0 0.55rem;
   padding: 0.38rem 0.5rem;

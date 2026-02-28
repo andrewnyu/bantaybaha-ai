@@ -26,6 +26,7 @@ const demoUpstreamWeatherInput = document.getElementById("demoUpstreamWeatherInp
 const generateUpstreamNodesBtn = document.getElementById("generateUpstreamNodesBtn");
 const clearDemoRainfallBtn = document.getElementById("clearDemoRainfallBtn");
 const weatherSourceStatus = document.getElementById("weatherSourceStatus");
+const demoTabStatus = document.getElementById("demoTabStatus");
 const weatherModeIndicator = document.getElementById("weatherModeIndicator");
 const tabLinks = document.querySelectorAll(".tab-link");
 const tabPanels = document.querySelectorAll("[data-tab-panel]");
@@ -220,6 +221,18 @@ const formatRainfallPreview = (values) => {
   }
 
   return values.join(", ");
+};
+
+const setDemoTabStatus = (message, level = "info") => {
+  if (!demoTabStatus) {
+    return;
+  }
+
+  const text = (message || "").trim();
+  demoTabStatus.textContent = text || "Ready for demo weather input.";
+
+  demoTabStatus.classList.remove("status-info", "status-warn", "status-error");
+  demoTabStatus.classList.add(`status-${level}`);
 };
 
 const setWeatherModeIndicator = (mode, label) => {
@@ -439,7 +452,7 @@ const generateUpstreamNodePayloadFromRisk = async () => {
   }
 
   if (!demoWeatherToggle?.checked) {
-    addStatusFlag("Enable demo mode before generating upstream nodes.", "warn");
+    setDemoTabStatus("Enable demo mode before generating upstream nodes.", "warn");
     return;
   }
 
@@ -450,7 +463,7 @@ const generateUpstreamNodePayloadFromRisk = async () => {
   try {
     baselineRainfall = parseDemoRainfallValues(demoRainfallInput?.value);
   } catch (error) {
-    addStatusFlag(error.message || "Invalid demo rainfall values.", "error");
+    setDemoTabStatus(error.message || "Invalid demo rainfall values.", "error");
     generateUpstreamNodesBtn.disabled = false;
     return;
   }
@@ -467,13 +480,13 @@ const generateUpstreamNodePayloadFromRisk = async () => {
     const response = await fetch(`/api/risk/?${params.toString()}`);
     const data = await response.json();
     if (!response.ok) {
-      addStatusFlag(data.error || "Could not generate upstream nodes.", "error");
+      setDemoTabStatus(data.error || "Could not generate upstream nodes.", "error");
       return;
     }
 
     const nodes = data?.upstream_summary?.dominant_upstream_points;
     if (!Array.isArray(nodes) || nodes.length === 0) {
-      addStatusFlag("No upstream nodes returned for this location.", "warn");
+      setDemoTabStatus("No upstream nodes returned for this location.", "warn");
       return;
     }
 
@@ -503,12 +516,12 @@ const generateUpstreamNodePayloadFromRisk = async () => {
     weatherSettings.demoUpstreamWeather = JSON.stringify(generated, null, 2);
     saveWeatherSettings();
     syncWeatherSettingsUI();
-    addStatusFlag(
+    setDemoTabStatus(
       `Generated ${generated.length} upstream nodes. Add per-node rainfall in JSON above.`,
-      "warn"
+      "info"
     );
   } catch (error) {
-    addStatusFlag("Failed to fetch upstream nodes for demo override.", "error");
+    setDemoTabStatus("Failed to fetch upstream nodes for demo override.", "error");
   } finally {
     generateUpstreamNodesBtn.disabled = !Boolean(weatherSettings.demoModeEnabled);
   }
@@ -711,14 +724,14 @@ if (demoUpstreamWeatherInput) {
   });
 }
 
-if (clearDemoRainfallBtn) {
+  if (clearDemoRainfallBtn) {
   clearDemoRainfallBtn.addEventListener("click", () => {
     weatherSettings.demoRainfall = "";
     weatherSettings.demoUpstreamWeather = "";
     weatherSettings.demoModeEnabled = true;
     saveWeatherSettings();
     syncWeatherSettingsUI();
-    addStatusFlag("Demo rainfall values cleared (will be treated as zeros).", "warn");
+    setDemoTabStatus("Demo rainfall values cleared (will be treated as zeros).", "warn");
   });
 }
 
