@@ -27,6 +27,20 @@
 
   <main class="layout">
     <section class="map-panel">
+      <div class="map-controls">
+        <div class="map-search-row">
+          <input
+            id="locationSearchInput"
+            type="text"
+            placeholder="Search place in Negros..."
+            autocomplete="off"
+            aria-label="Search location"
+          />
+          <button id="locationSearchBtn" type="button">Search</button>
+          <button id="myLocationBtn" type="button" class="secondary-btn">My Location</button>
+        </div>
+        <div id="selectedLocationLabel" class="selected-location-label">Barangay: n/a, City: n/a</div>
+      </div>
       <div id="map"></div>
     </section>
 

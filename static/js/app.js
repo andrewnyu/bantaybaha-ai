@@ -14,6 +14,10 @@ const chatLog = document.getElementById("chatLog");
 const chatSuggestions = document.getElementById("chatSuggestions");
 const chatSendBtn = document.getElementById("chatSendBtn");
 const mapNode = document.getElementById("map");
+const locationSearchInput = document.getElementById("locationSearchInput");
+const locationSearchBtn = document.getElementById("locationSearchBtn");
+const myLocationBtn = document.getElementById("myLocationBtn");
+const selectedLocationLabel = document.getElementById("selectedLocationLabel");
 
 const isOpenAIConfigured = chatCard?.dataset?.openaiConfigured === "1";
 
@@ -26,6 +30,8 @@ let routeDestinationMarker = null;
 let evacCenterMarkers = [];
 let riskCircle = null;
 const chatHistory = [];
+let selectedAddress = { barangay: "n/a", city: "n/a", raw: {} };
+let reverseLookupRequestId = 0;
 
 const shownWarnings = new Set();
 
@@ -67,6 +73,123 @@ const addStatusFlag = (message, type = "warn") => {
   flag.className = `status-flag status-flag-${type}`;
   flag.textContent = message;
   statusFlags.appendChild(flag);
+};
+
+const formatAddressLabel = (address = {}) => {
+  const barangay =
+    address.barangay ||
+    address.suburb ||
+    address.quarter ||
+    address.neighbourhood ||
+    address.village ||
+    address.hamlet ||
+    "n/a";
+
+  const city =
+    address.city || address.town || address.municipality || address.county || "n/a";
+
+  return { barangay, city };
+};
+
+const updateSelectedLocationLabel = () => {
+  if (!selectedLocationLabel) {
+    return;
+  }
+
+  const lat = Number.isFinite(selectedPoint.lat)
+    ? selectedPoint.lat.toFixed(5)
+    : "n/a";
+  const lng = Number.isFinite(selectedPoint.lng)
+    ? selectedPoint.lng.toFixed(5)
+    : "n/a";
+  const barangay = selectedAddress?.barangay || "n/a";
+  const city = selectedAddress?.city || "n/a";
+  selectedLocationLabel.textContent = `Barangay: ${barangay}, City: ${city} (${lat}, ${lng})`;
+};
+
+const resolveReverseAddress = async (lat, lng, requestId) => {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return;
+  }
+
+  const lookupId = requestId ?? ++reverseLookupRequestId;
+  const params = new URLSearchParams({
+    format: "jsonv2",
+    lat: String(lat),
+    lon: String(lng),
+    addressdetails: "1",
+    zoom: "18",
+  });
+
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?${params.toString()}`
+    );
+    if (!response.ok) {
+      throw new Error("reverse geocode request failed");
+    }
+
+    const data = await response.json();
+    if (lookupId !== reverseLookupRequestId) {
+      return;
+    }
+
+    const address = data?.address || {};
+    const formatted = formatAddressLabel(address);
+    selectedAddress = {
+      barangay: formatted.barangay,
+      city: formatted.city,
+      raw: address,
+    };
+    updateSelectedLocationLabel();
+  } catch (error) {
+    if (lookupId !== reverseLookupRequestId) {
+      return;
+    }
+
+    selectedAddress = {
+      barangay: "n/a",
+      city: "n/a",
+      raw: selectedAddress.raw || {},
+    };
+    addStatusFlag("Could not resolve address for this location.", "warn");
+    updateSelectedLocationLabel();
+  }
+};
+
+const setSelectedPoint = (latlng, origin = "manual") => {
+  if (!latlng) {
+    return;
+  }
+
+  const lat = Number(latlng.lat);
+  const lng = Number(latlng.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return;
+  }
+
+  selectedPoint = { lat, lng };
+
+  if (mapEnabled && map) {
+    if (selectedMarker) {
+      selectedMarker.setLatLng([lat, lng]);
+    } else {
+      selectedMarker = L.marker([lat, lng]).addTo(map);
+    }
+
+    if (origin === "search" || origin === "my_location") {
+      map.setView([lat, lng], Math.max(map.getZoom(), 14));
+    }
+  }
+
+  const lookupId = ++reverseLookupRequestId;
+  selectedAddress = {
+    barangay: "n/a",
+    city: "n/a",
+    raw: {},
+  };
+  updateSelectedLocationLabel();
+  resolveReverseAddress(lat, lng, lookupId);
 };
 
 const initFallbackWarnings = () => {
@@ -124,12 +247,10 @@ const initMap = () => {
     legend.addTo(map);
 
     selectedMarker = L.marker([selectedPoint.lat, selectedPoint.lng]).addTo(map);
+    setSelectedPoint(selectedPoint, "init");
+
     map.on("click", (event) => {
-      selectedPoint = event.latlng;
-      if (selectedMarker) {
-        selectedMarker.setLatLng(event.latlng);
-      }
-      appendChat("BahaWatch", "Location updated. Ask me what you want next.");
+      setSelectedPoint(event.latlng, "click");
     });
 
     mapEnabled = true;
@@ -142,6 +263,25 @@ const initMap = () => {
 };
 
 initMap();
+updateSelectedLocationLabel();
+
+if (locationSearchInput && locationSearchBtn) {
+  const runSearch = () => {
+    searchLocation(locationSearchInput.value);
+  };
+
+  locationSearchBtn.addEventListener("click", runSearch);
+  locationSearchInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      runSearch();
+    }
+  });
+}
+
+if (myLocationBtn) {
+  myLocationBtn.addEventListener("click", getCurrentLocation);
+}
 
 chatForm.addEventListener("submit", submitChat);
 chatSuggestions.addEventListener("click", submitSuggestion);
@@ -162,6 +302,87 @@ async function submitSuggestion(event) {
     return;
   }
   await submitChat(null, message);
+}
+
+async function searchLocation(query) {
+  const trimmedQuery = (query || "").trim();
+  if (!trimmedQuery) {
+    addStatusFlag("Enter a place name to search.", "warn");
+    return;
+  }
+
+  if (locationSearchBtn) {
+    locationSearchBtn.disabled = true;
+  }
+
+  const params = new URLSearchParams({
+    format: "jsonv2",
+    limit: "1",
+    addressdetails: "1",
+    countrycodes: "ph",
+    bounded: "1",
+    viewbox: `${NEGROS_BOUNDS.west},${NEGROS_BOUNDS.north},${NEGROS_BOUNDS.east},${NEGROS_BOUNDS.south}`,
+    q: trimmedQuery,
+  });
+
+  try {
+    const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`);
+    if (!response.ok) {
+      throw new Error("search request failed");
+    }
+
+    const data = await response.json();
+    if (!Array.isArray(data) || data.length === 0) {
+      addStatusFlag("No matching location found in Negros. Try a nearby place name.", "warn");
+      return;
+    }
+
+    const first = data[0];
+    const lat = Number(first.lat);
+    const lng = Number(first.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      addStatusFlag("Search result had invalid coordinates.", "warn");
+      return;
+    }
+
+    setSelectedPoint({ lat, lng }, "search");
+  } catch (error) {
+    addStatusFlag("Location search failed. Please try again.", "warn");
+  } finally {
+    if (locationSearchBtn) {
+      locationSearchBtn.disabled = false;
+    }
+  }
+}
+
+function getCurrentLocation() {
+  if (!myLocationBtn) {
+    return;
+  }
+
+  if (!navigator.geolocation) {
+    addStatusFlag("Geolocation is not supported by this browser.", "warn");
+    return;
+  }
+
+  myLocationBtn.disabled = true;
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      myLocationBtn.disabled = false;
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      setSelectedPoint({ lat, lng }, "my_location");
+    },
+    () => {
+      myLocationBtn.disabled = false;
+      addStatusFlag("Unable to get your current location. Please allow location access.", "warn");
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 12000,
+      maximumAge: 30000,
+    }
+  );
 }
 
 async function submitChat(event, messageOverride) {

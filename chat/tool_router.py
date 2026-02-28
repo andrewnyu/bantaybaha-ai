@@ -1,5 +1,7 @@
 import json
+import math
 import re
+from copy import deepcopy
 from typing import Any
 
 import requests
@@ -9,6 +11,12 @@ from core.services import nearest_evacuation_centers
 from risk.risk_engine import estimate_flood_risk
 from risk.upstream import compute_upstream_rain_index
 from routing.routing_engine import compute_safe_route
+
+MAX_ROUTE_LANDMARK_STOPS = 6
+NOMINATIM_ROUTE_UA = "BahaWatchRouteChat/1.0 (hackathon demo)"
+NOMINATIM_TIMEOUT_SECONDS = 5
+
+_route_landmark_cache: dict[tuple[float, float], str] = {}
 
 
 def parse_coordinate_pairs(message: str) -> list[tuple[float, float]]:
@@ -42,6 +50,185 @@ def _normalize_chat_history(history: Any) -> list[dict[str, str]]:
         normalized.append({"role": role, "content": content})
 
     return normalized[-10:]
+
+
+def _safe_float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_landmark_from_payload(payload: dict[str, Any]) -> str | None:
+    address = payload.get("address", {})
+    if not isinstance(address, dict):
+        address = {}
+
+    direct_name = payload.get("name")
+    if isinstance(direct_name, str):
+        direct_name = direct_name.strip()
+        if direct_name:
+            return direct_name
+
+    for key in (
+        "amenity",
+        "shop",
+        "tourism",
+        "leisure",
+        "office",
+        "road",
+        "neighbourhood",
+        "suburb",
+        "quarter",
+        "hamlet",
+        "village",
+        "town",
+        "municipality",
+        "city",
+        "county",
+    ):
+        value = address.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    display_name = payload.get("display_name")
+    if isinstance(display_name, str):
+        first_component = display_name.split(",")[0].strip()
+        if first_component:
+            return first_component
+
+    return None
+
+
+def _lookup_landmark(lat: float, lng: float) -> str | None:
+    lat_value = _safe_float(lat)
+    lng_value = _safe_float(lng)
+    if lat_value is None or lng_value is None:
+        return None
+
+    cache_key = (round(lat_value, 5), round(lng_value, 5))
+    if cache_key in _route_landmark_cache:
+        return _route_landmark_cache[cache_key]
+
+    try:
+        response = requests.get(
+            "https://nominatim.openstreetmap.org/reverse",
+            params={
+                "format": "jsonv2",
+                "lat": str(lat_value),
+                "lon": str(lng_value),
+                "addressdetails": "1",
+                "zoom": "18",
+            },
+            headers={"User-Agent": NOMINATIM_ROUTE_UA},
+            timeout=NOMINATIM_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except (requests.RequestException, ValueError):
+        return None
+
+    label = _extract_landmark_from_payload(payload if isinstance(payload, dict) else {})
+    if not isinstance(label, str) or not label:
+        return None
+
+    _route_landmark_cache[cache_key] = label
+    return label
+
+
+def _sample_route_indices(point_count: int, max_points: int) -> list[int]:
+    if point_count <= 0:
+        return []
+    if max_points <= 1:
+        return [0]
+    if point_count <= max_points:
+        return list(range(point_count))
+
+    step = math.ceil((point_count - 1) / (max_points - 1))
+    indices = list(range(0, point_count, step))
+    if indices[-1] != point_count - 1:
+        indices.append(point_count - 1)
+
+    return indices[:max_points]
+
+
+def _build_route_landmark_summary(
+    route_payload: dict[str, Any],
+    destination_name: str | None = None,
+) -> dict[str, Any] | None:
+    route_points = route_payload.get("route")
+    if not isinstance(route_points, list) or len(route_points) < 2:
+        return None
+
+    point_count = len(route_points)
+    selected_indices = _sample_route_indices(point_count, MAX_ROUTE_LANDMARK_STOPS)
+    stops: list[dict[str, Any]] = []
+
+    for index in selected_indices:
+        point = route_points[index]
+        if not isinstance(point, dict):
+            continue
+
+        lat = _safe_float(point.get("lat"))
+        lng = _safe_float(point.get("lng"))
+        if lat is None or lng is None:
+            continue
+
+        is_start = index == 0
+        is_destination = index == point_count - 1
+        if is_start:
+            label = "Current location"
+        elif is_destination and destination_name:
+            label = str(destination_name)
+        else:
+            label = _lookup_landmark(lat, lng)
+            if not label:
+                label = "Road waypoint"
+
+        stops.append(
+            {
+                "label": label,
+                "is_start": is_start,
+                "is_destination": is_destination,
+            }
+        )
+
+    if not stops:
+        return None
+
+    path_text = " -> ".join(stop["label"] for stop in stops)
+    return {"stops": stops, "path_text": path_text}
+
+
+def _sanitize_tool_results_for_openai(tool_results: dict[str, Any]) -> dict[str, Any]:
+    safe = deepcopy(tool_results)
+    route_payload = safe.get("route")
+    if isinstance(route_payload, dict):
+        sanitized_route = {
+            "mode": route_payload.get("mode", "safest"),
+            "total_distance": route_payload.get("total_distance"),
+            "hazard_exposure": route_payload.get("hazard_exposure"),
+            "route_point_count": (
+                len(route_payload["route"])
+                if isinstance(route_payload.get("route"), list)
+                else 0
+            ),
+        }
+
+        route_summary = route_payload.get("route_summary", {})
+        if isinstance(route_summary, dict):
+            stops = route_summary.get("stops")
+            if isinstance(stops, list):
+                sanitized_route["landmark_stops"] = [
+                    stop.get("label", "") for stop in stops if isinstance(stop, dict)
+                ]
+            path_text = route_summary.get("path_text")
+            if isinstance(path_text, str) and path_text:
+                sanitized_route["landmark_path"] = path_text
+
+        safe["route"] = sanitized_route
+
+    return safe
 
 
 def _detect_tool_intents(message: str) -> tuple[bool, bool, bool, bool]:
@@ -420,6 +607,11 @@ def _build_conversational_reply(
             f"{route_label} suggestion: about {route['total_distance']} {units_km}, "
             f"hazard exposure {route['hazard_exposure']} (mode: {route.get('mode', 'safest')})."
         )
+        route_summary = route.get("route_summary")
+        if isinstance(route_summary, dict):
+            path_text = route_summary.get("path_text")
+            if path_text:
+                parts.append(f"{route_label} path: {path_text}.")
 
     if not parts:
         return no_data
@@ -494,7 +686,8 @@ def _build_openai_reply(
     if tool_results:
         tool_context = ""
         try:
-            tool_context = json.dumps(tool_results, ensure_ascii=False, default=str)
+            sanitized = _sanitize_tool_results_for_openai(tool_results)
+            tool_context = json.dumps(sanitized, ensure_ascii=False, default=str)
         except TypeError:
             tool_context = str(tool_results)
         user_prompt = (
@@ -657,6 +850,10 @@ def run_tool_router(
                 dest_lat=dest_lat,
                 dest_lng=dest_lng,
                 mode=mode,
+            )
+            route_payload["result"]["route_summary"] = _build_route_landmark_summary(
+                route_payload["result"],
+                destination_name=route_destination_name,
             )
             tool_outputs.append(route_payload)
             tool_results["route"] = route_payload["result"]

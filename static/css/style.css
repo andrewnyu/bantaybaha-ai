@@ -82,6 +82,55 @@ body {
   align-items: start;
 }
 
+.map-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.map-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.map-search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+#locationSearchInput {
+  width: 100%;
+  margin-top: 0;
+}
+
+#myLocationBtn {
+  white-space: nowrap;
+  background: #eef4ff;
+  color: var(--ink);
+  border: 1px solid #cdd6ee;
+}
+
+#myLocationBtn:hover {
+  background: #e1e8fb;
+}
+
+#myLocationBtn:active {
+  background: #d6dff8;
+}
+
+.selected-location-label {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.46rem 0.6rem;
+  color: #3f4754;
+  font-size: 0.81rem;
+  line-height: 1.3;
+}
+
 #map {
   width: 100%;
   min-height: 78vh;
