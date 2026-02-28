@@ -3,6 +3,8 @@
 .venv/
 /data/negros_dem.tif
 /data/negros_graph.graphml
+/data/negros_river_graph.gpickle
 /data/negros_rivers.geojson
+/data/river_sample_points.json
 __pycache__/
 db.sqlite3

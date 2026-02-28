@@ -4,7 +4,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
-from .chat_agent import ChatContext, run_chat_agent
+from .tool_router import run_tool_router
 
 
 @csrf_exempt
@@ -20,17 +20,28 @@ def chat_api(request):
         return JsonResponse({"error": "message is required"}, status=400)
 
     try:
-        context = ChatContext(
-            lat=float(payload.get("lat", ChatContext.lat)),
-            lng=float(payload.get("lng", ChatContext.lng)),
-            dest_lat=float(payload.get("dest_lat", ChatContext.dest_lat)),
-            dest_lng=float(payload.get("dest_lng", ChatContext.dest_lng)),
-        )
+        lat = float(payload.get("lat", 14.5995))
+        lng = float(payload.get("lng", 120.9842))
+        dest_lat = payload.get("dest_lat")
+        dest_lng = payload.get("dest_lng")
+        dest_lat = float(dest_lat) if dest_lat is not None else None
+        dest_lng = float(dest_lng) if dest_lng is not None else None
     except (TypeError, ValueError):
         return JsonResponse(
             {"error": "lat/lng/dest_lat/dest_lng must be numeric when provided"},
             status=400,
         )
 
-    result = run_chat_agent(message, context)
+    tool_calls = payload.get("tool_calls")
+    if tool_calls is not None and not isinstance(tool_calls, list):
+        return JsonResponse({"error": "tool_calls must be an array"}, status=400)
+
+    result = run_tool_router(
+        message=message,
+        lat=lat,
+        lng=lng,
+        dest_lat=dest_lat,
+        dest_lng=dest_lng,
+        tool_calls=tool_calls,
+    )
     return JsonResponse(result)

@@ -4,11 +4,8 @@ from pathlib import Path
 import networkx as nx
 import osmnx as ox
 
-from risk.risk_engine import (
-    distance_to_nearest_river_km,
-    get_elevation_meters,
-    get_forecast_rainfall_mm,
-)
+from risk.risk_engine import get_forecast_rainfall_sum_mm
+from risk.upstream import compute_upstream_rain_index
 
 NEGROS_GRAPH_PATH = Path(__file__).resolve().parents[1] / "data" / "negros_graph.graphml"
 SAFETY_HUB_RADIUS_METERS = 5000
@@ -55,7 +52,7 @@ def extract_local_graph(graph: nx.MultiDiGraph, origin: int, destination: int) -
     return graph.subgraph(base.nodes).copy()
 
 
-def add_edge_hazard_scores(graph: nx.MultiDiGraph, rainfall_next_3h: float) -> None:
+def add_edge_hazard_scores(graph: nx.MultiDiGraph, rainfall_next_3h: float, upstream_risk_norm: float) -> None:
     for u, v, key, data in graph.edges(keys=True, data=True):
         if data.get("hazard_score") is not None:
             continue
@@ -69,13 +66,25 @@ def add_edge_hazard_scores(graph: nx.MultiDiGraph, rainfall_next_3h: float) -> N
         midpoint_lat = (uy + vy) / 2
 
         hazard = 0.0
-        elevation = get_elevation_meters(midpoint_lat, midpoint_lng, allow_remote_lookup=False)
+        elevation = 9999
+        try:
+            from risk.risk_engine import get_elevation_meters
+
+            elevation = get_elevation_meters(midpoint_lat, midpoint_lng, allow_remote_lookup=False)
+        except Exception:
+            elevation = 30
+
         if elevation < 20:
             hazard += 2
 
+        from risk.risk_engine import distance_to_nearest_river_km
+
         distance_to_river_km = distance_to_nearest_river_km(midpoint_lat, midpoint_lng)
-        if distance_to_river_km <= 0.1:
+        if distance_to_river_km <= 0.25:
             hazard += 2
+            hazard += (upstream_risk_norm / 100.0) * 4.0
+        elif distance_to_river_km <= 0.75:
+            hazard += (upstream_risk_norm / 100.0) * 2.0
 
         if rainfall_next_3h > 30:
             hazard += 1
@@ -95,9 +104,14 @@ def compute_safe_route(
     dest_node = nearest_node_id(graph, dest_lat, dest_lng)
 
     local_graph = extract_local_graph(graph, origin_node, dest_node)
-    rainfall_sample = get_forecast_rainfall_mm(origin_lat, origin_lng, 3)
+    rainfall_sample = get_forecast_rainfall_sum_mm(origin_lat, origin_lng, 3)
+    upstream_summary = compute_upstream_rain_index(origin_lat, origin_lng, horizon_hours=3)
 
-    add_edge_hazard_scores(local_graph, rainfall_sample)
+    add_edge_hazard_scores(
+        local_graph,
+        rainfall_sample,
+        upstream_summary.get("upstream_rain_index_norm", 0.0),
+    )
 
     def edge_cost(start, end, data):
         base_length = float(data.get("length", 1.0))

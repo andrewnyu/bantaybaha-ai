@@ -1,13 +1,14 @@
 import math
 from functools import lru_cache
 from pathlib import Path
-from typing import Tuple
 
-import requests
 from django.conf import settings
-from shapely.geometry import Point, shape
 
 from core.geo import haversine_km
+from weather.client import get_hourly_rain_sum
+from risk.upstream import compute_upstream_rain_index
+
+from shapely.geometry import Point, shape
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RISK_DATA_DIR = Path(__file__).resolve().parent / "data"
@@ -15,9 +16,7 @@ NEGROS_DATA_DIR = PROJECT_ROOT / "data"
 RISK_POLYGON_FALLBACK = RISK_DATA_DIR / "flood_zones.geojson"
 NEGROS_RIVERS_PATH = NEGROS_DATA_DIR / "negros_rivers.geojson"
 NEGROS_DEM_PATH = NEGROS_DATA_DIR / "negros_dem.tif"
-OPENWEATHER_URL = "https://api.openweathermap.org/data/3.0/onecall"
 OPEN_ELEVATION_URL = "https://api.open-elevation.com/api/v1/lookup"
-OPENWEATHER_TIMEOUT_SECONDS = 5
 OPEN_ELEVATION_TIMEOUT_SECONDS = 5
 
 
@@ -25,15 +24,20 @@ def clamp(value: float, min_value: float, max_value: float) -> float:
     return max(min_value, min(max_value, value))
 
 
-@lru_cache(maxsize=1)
-def load_flood_zone_polygons() -> list:
-    if not RISK_POLYGON_FALLBACK.exists():
+def _load_geojson_payload(path: Path) -> list:
+    if not path.exists():
         return []
-    payload = RISK_POLYGON_FALLBACK.read_text()
+    payload = path.read_text()
     import json
 
     data = json.loads(payload)
-    return [shape(feature["geometry"]) for feature in data.get("features", [])]
+    return data.get("features", [])
+
+
+@lru_cache(maxsize=1)
+def load_flood_zone_polygons() -> list:
+    features = _load_geojson_payload(RISK_POLYGON_FALLBACK)
+    return [shape(feature["geometry"]) for feature in features]
 
 
 def _river_union_geometry() -> object | None:
@@ -64,7 +68,6 @@ def load_river_union() -> object | None:
     return union
 
 
-@lru_cache(maxsize=1)
 def _load_river_points_fallback() -> list[tuple[float, float]]:
     points_path = RISK_DATA_DIR / "river_points.json"
     if not points_path.exists():
@@ -75,57 +78,8 @@ def _load_river_points_fallback() -> list[tuple[float, float]]:
     return [(item["lat"], item["lng"]) for item in payload.get("points", [])]
 
 
-def _safe_openweather_params(lat: float, lng: float) -> dict:
-    api_key = getattr(settings, "OPENWEATHER_API_KEY", "")
-    return {
-        "lat": lat,
-        "lon": lng,
-        "exclude": "minutely,daily,alerts",
-        "appid": api_key,
-        "units": "metric",
-    }
-
-
-def _fallback_rainfall_mm(hours: int) -> float:
-    return 7.5 * hours
-
-
-def simulate_rainfall_mm(hours: int) -> float:
-    # Deterministic fallback when no API key / call fails.
-    return round(_fallback_rainfall_mm(hours), 1)
-
-
-def get_forecast_rainfall_mm(lat: float, lng: float, hours: int) -> float:
-    api_key = getattr(settings, "OPENWEATHER_API_KEY", "")
-    if not api_key or api_key == "your_key_here":
-        return simulate_rainfall_mm(hours)
-
-    params = _safe_openweather_params(lat, lng)
-
-    try:
-        response = requests.get(
-            OPENWEATHER_URL,
-            params=params,
-            timeout=OPENWEATHER_TIMEOUT_SECONDS,
-        )
-        if response.status_code != 200:
-            return simulate_rainfall_mm(hours)
-
-        payload = response.json()
-        hourly = payload.get("hourly", [])
-        if not hourly:
-            return simulate_rainfall_mm(hours)
-
-        safe_hours = max(1, min(6, int(hours)))
-        total = 0.0
-        for i in range(min(safe_hours, len(hourly))):
-            hour_bucket = hourly[i]
-            rain = hour_bucket.get("rain", {}) if isinstance(hour_bucket, dict) else {}
-            total += float(rain.get("1h", 0.0) or 0.0)
-
-        return round(total, 1)
-    except Exception:
-        return simulate_rainfall_mm(hours)
+def get_forecast_rainfall_sum_mm(lat: float, lng: float, hours: int) -> float:
+    return get_hourly_rain_sum(lat=lat, lng=lng, hours=max(1, min(6, int(hours))))
 
 
 def _simulate_elevation_m(lat: float, lng: float) -> float:
@@ -148,6 +102,8 @@ def get_elevation_meters(lat: float, lng: float, allow_remote_lookup: bool = Tru
 
     if allow_remote_lookup:
         try:
+            import requests
+
             response = requests.get(
                 OPEN_ELEVATION_URL,
                 params={"locations": f"{lat},{lng}"},
@@ -225,30 +181,41 @@ def classify_risk(score: int) -> str:
 def estimate_flood_risk(lat: float, lng: float, hours: int = 3) -> dict:
     safe_hours = int(clamp(hours, 1, 6))
 
-    rainfall_mm = _forecast_rainfall_mm(lat, lng, safe_hours)
+    local_rain_3h = get_forecast_rainfall_sum_mm(lat, lng, safe_hours)
     elevation_m = get_elevation_meters(lat, lng, allow_remote_lookup=True)
     elev_factor = elevation_factor(elevation_m)
-
     river_distance = distance_to_nearest_river_km(lat, lng)
     river_factor = river_proximity_factor(river_distance)
-
     hist_factor, in_flood_zone = historical_flood_factor(lat, lng)
 
-    # Weighted heuristic score for 1-6 hour flood outlook.
+    upstream = compute_upstream_rain_index(lat, lng, horizon_hours=safe_hours)
+    upstream_norm = upstream["upstream_rain_index_norm"]
+
     raw_score = (
-        (rainfall_mm * 0.5)
-        + (river_factor * 0.2)
-        + (elev_factor * 0.2)
-        + (hist_factor * 0.1)
+        (local_rain_3h * 0.35)
+        + (upstream_norm * 0.35)
+        + (river_factor * 0.15)
+        + (elev_factor * 0.1)
+        + (hist_factor * 0.05)
     )
     risk_score = int(round(clamp(raw_score, 0.0, 100.0)))
     risk_level = classify_risk(risk_score)
 
+    expected_peak = upstream.get("expected_peak_in_hours")
     explanation = [
-        f"Rainfall next {safe_hours}h: {rainfall_mm} mm",
+        f"Rainfall next {safe_hours}h: {local_rain_3h} mm",
         f"Elevation: {elevation_m} m",
         f"Distance to nearest river: {round(river_distance, 3)} km",
+        f"Upstream risk index: {upstream['upstream_rain_index']} (normalized {upstream['upstream_rain_index_norm']})",
     ]
+
+    dominant_points = upstream.get("dominant_upstream_points") or []
+    if dominant_points:
+        top = dominant_points[0]
+        explanation.append(
+            f"Heavy rainfall detected upstream in watershed ({top['rain_sum']} mm), likely to impact downstream in "
+            f"~{expected_peak} hours."
+        )
 
     if in_flood_zone:
         explanation.append("Inside historical flood zone")
@@ -261,5 +228,7 @@ def estimate_flood_risk(lat: float, lng: float, hours: int = 3) -> dict:
     return {
         "risk_score": risk_score,
         "risk_level": risk_level,
+        "expected_peak_in_hours": expected_peak,
         "explanation": explanation,
+        "upstream_summary": upstream,
     }

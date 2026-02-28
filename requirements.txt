@@ -4,3 +4,4 @@ Shapely>=2.0
 osmnx>=1.9
 requests>=2.31
 rasterio>=1.3
+geopandas>=0.14
