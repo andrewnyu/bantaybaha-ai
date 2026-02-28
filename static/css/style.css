@@ -559,6 +559,82 @@ button:disabled {
   font-size: 0.74rem;
 }
 
+.chat-risk-ruler {
+  margin-top: 0.42rem;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.chat-risk-ruler-track {
+  position: relative;
+  width: 26px;
+  height: 84px;
+  border: 1px solid #c0ccdd;
+  border-radius: 999px;
+  background: linear-gradient(to top, #eef2ff, #ffffff 55%);
+  overflow: hidden;
+}
+
+.chat-risk-ruler-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  transition: height 0.28s ease;
+}
+
+.chat-risk-ruler-fill.risk-low {
+  background: linear-gradient(to top, #34a853, #8fd8a4);
+}
+
+.chat-risk-ruler-fill.risk-medium {
+  background: linear-gradient(to top, #fbbc04, #ffd966);
+}
+
+.chat-risk-ruler-fill.risk-high {
+  background: linear-gradient(to top, #ea4335, #f28b82);
+}
+
+.chat-risk-ruler-person {
+  font-size: 1.2rem;
+  line-height: 1;
+  transform: translateY(2px);
+}
+
+.chat-risk-ruler-mark {
+  position: absolute;
+  left: calc(100% + 7px);
+  transform: translateY(50%);
+  font-size: 0.65rem;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.chat-risk-ruler-mark span {
+  display: inline-block;
+  background: #ffffff;
+  border: 1px solid #dfe6ee;
+  border-radius: 999px;
+  padding: 0.06rem 0.35rem;
+}
+
+.chat-risk-ruler-mark.mark-knee {
+  color: #1a4d2e;
+}
+
+.chat-risk-ruler-mark.mark-chest {
+  color: #7a5400;
+}
+
+.chat-risk-ruler-mark.mark-head {
+  color: #7a2b00;
+}
+
+.chat-risk-ruler-mark.mark-roof {
+  color: #6b3c2f;
+}
+
 .evac-center-icon {
   background: transparent;
   border: none;

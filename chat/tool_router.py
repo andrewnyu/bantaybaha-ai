@@ -601,7 +601,7 @@ def _build_conversational_reply(
             water_level = risk_payload.get("estimated_flood_level_m")
             water_zone = risk_payload.get("flood_level_zone")
             zone_map = {
-                "shallow": "knee-level",
+                "shallow": "no issue",
                 "knee": "knee level",
                 "chest": "chest level",
                 "above-head": "above-head level",

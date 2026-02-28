@@ -1047,11 +1047,11 @@ const appendRiskMeterBubble = (riskPayload) => {
   }
 
   const zoneLabelMap = {
-    shallow: "Below-knee depth",
+    shallow: "No issue",
     knee: "Knee level",
     chest: "Chest level",
     "above-head": "Above-head level",
-    "2-storey-height": "2-storey height",
+    "2-storey-height": "2-storey level",
   };
 
   const score = Math.max(0, Math.min(100, Math.round(scoreRaw)));
@@ -1060,6 +1060,11 @@ const appendRiskMeterBubble = (riskPayload) => {
   const floodLevel = Number(riskPayload.estimated_flood_level_m);
   const rawZone = (riskPayload.flood_level_zone || "").toString();
   const zoneText = zoneLabelMap[rawZone] || "";
+  const safeFloodLevel = Number.isFinite(floodLevel) ? Math.max(0, floodLevel) : 0;
+  const rulerFillPercent = Math.max(
+    0,
+    Math.min(100, Math.round((safeFloodLevel / 2.5) * 100))
+  );
   const floodText =
     Number.isFinite(floodLevel)
       ? `Predicted depth: ${floodLevel.toFixed(2)}m (${zoneText || "estimated"}).`
@@ -1078,6 +1083,16 @@ const appendRiskMeterBubble = (riskPayload) => {
     </div>
     <div class="chat-risk-track" role="presentation">
       <span class="chat-risk-fill risk-${bandClass.toLowerCase()}" style="width:${score}%"></span>
+    </div>
+    <div class="chat-risk-ruler" role="presentation" aria-label="Water level ruler vs average person">
+      <div class="chat-risk-ruler-track">
+        <span class="chat-risk-ruler-fill risk-${bandClass.toLowerCase()}" style="height:${rulerFillPercent}%;"></span>
+        <span class="chat-risk-ruler-mark mark-knee" style="bottom:20%"><span>knee 0.2m</span></span>
+        <span class="chat-risk-ruler-mark mark-chest" style="bottom:45%"><span>chest 0.5m</span></span>
+        <span class="chat-risk-ruler-mark mark-head" style="bottom:80%"><span>head 1.0m</span></span>
+        <span class="chat-risk-ruler-mark mark-roof" style="top:0%"><span>2-storey</span></span>
+      </div>
+      <div class="chat-risk-ruler-person" aria-hidden="true">🧍</div>
     </div>
     <span class="chat-meta">${floodText}</span>
   `;
