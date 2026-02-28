@@ -24,6 +24,7 @@ let selectedPoint = { ...DEFAULT_COORD };
 let selectedMarker = null;
 let routeLine = null;
 let routeDestinationMarker = null;
+let evacCenterMarkers = [];
 let riskCircle = null;
 
 const shownWarnings = new Set();
@@ -207,6 +208,8 @@ async function submitChat(event, messageOverride) {
     if (data.map_payload && mapEnabled) {
       if (data.map_payload.type === "route" && data.map_payload.route) {
         renderChatRoute(data.map_payload);
+      } else if (data.map_payload.type === "evac_centers") {
+        renderEvacCenters(data.map_payload.centers || []);
       } else if (data.map_payload.type === "risk") {
         renderRiskMarker(data.map_payload);
       }
@@ -222,6 +225,9 @@ async function submitChat(event, messageOverride) {
 }
 
 function renderRiskMarker(payload) {
+  clearRouteOverlays();
+  clearEvacCenterMarkers();
+
   if (!mapEnabled || !map) {
     return;
   }
@@ -243,6 +249,8 @@ function renderRiskMarker(payload) {
 }
 
 function renderChatRoute(route) {
+  clearEvacCenterMarkers();
+
   if (!mapEnabled || !map) {
     return;
   }
@@ -251,14 +259,7 @@ function renderChatRoute(route) {
     return;
   }
 
-  if (routeLine) {
-    map.removeLayer(routeLine);
-  }
-
-  if (routeDestinationMarker) {
-    map.removeLayer(routeDestinationMarker);
-    routeDestinationMarker = null;
-  }
+  clearRouteOverlays();
 
   const latlngs = route.route.map((point) => [point.lat, point.lng]);
   routeLine = L.polyline(latlngs, {
@@ -276,6 +277,70 @@ function renderChatRoute(route) {
   }
 
   map.fitBounds(routeLine.getBounds(), { padding: [30, 30] });
+}
+
+function renderEvacCenters(centers) {
+  if (!mapEnabled || !map) {
+    return;
+  }
+
+  clearRouteOverlays();
+  clearEvacCenterMarkers();
+
+  if (!Array.isArray(centers) || centers.length === 0) {
+    return;
+  }
+
+  const centerPoints = [];
+  centers.forEach((center) => {
+    const lat = Number(center.latitude);
+    const lng = Number(center.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return;
+    }
+
+    const marker = centerMarkerIcon
+      ? L.marker([lat, lng], { icon: centerMarkerIcon })
+      : L.marker([lat, lng]);
+    const label = center.name || "Evacuation Center";
+    const distance = center.distance_km ?? "";
+    const distanceLabel = distance === "" ? "" : ` (${distance} km away)`;
+    marker.bindPopup(`<strong>${label}</strong>${distanceLabel}`);
+    marker.addTo(map);
+    evacCenterMarkers.push(marker);
+    centerPoints.push([lat, lng]);
+  });
+
+  if (centerPoints.length === 1) {
+    map.setView(centerPoints[0], Math.max(map.getZoom(), 14));
+    return;
+  }
+
+  const bounds = L.latLngBounds(centerPoints);
+  if (bounds.isValid()) {
+    map.fitBounds(bounds, { padding: [35, 35] });
+  }
+}
+
+function clearEvacCenterMarkers() {
+  if (!map || evacCenterMarkers.length === 0) {
+    return;
+  }
+
+  evacCenterMarkers.forEach((marker) => map.removeLayer(marker));
+  evacCenterMarkers = [];
+}
+
+function clearRouteOverlays() {
+  if (routeLine) {
+    map.removeLayer(routeLine);
+    routeLine = null;
+  }
+
+  if (routeDestinationMarker) {
+    map.removeLayer(routeDestinationMarker);
+    routeDestinationMarker = null;
+  }
 }
 
 function appendChat(author, text) {

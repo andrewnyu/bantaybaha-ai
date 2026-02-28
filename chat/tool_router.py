@@ -446,6 +446,12 @@ def run_tool_router(
             "mode": route.get("mode", "safest"),
             "type": "route",
         }
+    elif "evac" in tool_results:
+        centers = tool_results["evac"]
+        map_payload = {
+            "centers": centers,
+            "type": "evac_centers",
+        }
     elif "risk" in tool_results:
         risk_payload = tool_results["risk"]
         map_payload = {
