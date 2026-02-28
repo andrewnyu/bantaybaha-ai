@@ -74,6 +74,14 @@ body {
   font-weight: 600;
 }
 
+.tab-panel {
+  display: none;
+}
+
+.tab-panel.active {
+  display: block;
+}
+
 .layout {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
@@ -196,6 +204,16 @@ input[type="text"] {
   background: #fff;
 }
 
+input[type="number"] {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.56rem;
+  margin-top: 0.45rem;
+  font: inherit;
+  background: #fff;
+}
+
 button,
 .action-btn,
 .send-btn {
@@ -207,6 +225,69 @@ button,
   font-weight: 500;
   cursor: pointer;
   padding: 0.56rem;
+}
+
+button.secondary-btn,
+.secondary-btn {
+  background: #eef4ff;
+  color: var(--ink);
+  border: 1px solid #c8d4f2;
+}
+
+button.secondary-btn:hover,
+.secondary-btn:hover {
+  background: #e1e8fb;
+}
+
+.settings-card {
+  margin-top: 0.2rem;
+}
+
+.settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.settings-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.86rem;
+  color: var(--ink);
+  cursor: pointer;
+  margin: 0;
+}
+
+.settings-helper {
+  margin: 0.36rem 0 0.05rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.settings-source-status {
+  margin-top: 0.45rem;
+  padding: 0.44rem 0.55rem;
+  border-radius: 8px;
+  background: #eef5ff;
+  border: 1px solid #d5dff0;
+  font-size: 0.78rem;
+}
+
+.demo-context {
+  margin: 0.2rem 0 0.55rem;
+  padding: 0.38rem 0.5rem;
+  border-radius: 8px;
+  border: 1px solid #e2eaf8;
+  background: #f8faff;
+  font-size: 0.79rem;
+}
+
+input:disabled,
+button:disabled {
+  opacity: 0.6;
 }
 
 button:hover,

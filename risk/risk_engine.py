@@ -117,6 +117,7 @@ def get_forecast_rainfall_sum_mm(
     hours: int,
     weather_mode: str = "live",
     reference_time: str | int | float | None = None,
+    demo_rainfall: object | None = None,
 ) -> float:
     return get_hourly_rain_sum(
         lat=lat,
@@ -124,6 +125,7 @@ def get_forecast_rainfall_sum_mm(
         hours=max(1, min(6, int(hours))),
         weather_mode=weather_mode,
         reference_time=reference_time,
+        demo_rainfall=demo_rainfall,
     )
 
 
@@ -244,6 +246,7 @@ def estimate_flood_risk(
     hours: int = 3,
     weather_mode: str = "live",
     reference_time: str | int | float | None = None,
+    demo_rainfall: object | None = None,
 ) -> dict:
     safe_hours = int(clamp(hours, 1, 6))
 
@@ -253,6 +256,7 @@ def estimate_flood_risk(
         hours=safe_hours,
         weather_mode=weather_mode,
         reference_time=reference_time,
+        demo_rainfall=demo_rainfall,
     )
     elevation_m = get_elevation_meters(lat, lng, allow_remote_lookup=True)
     elev_factor = elevation_factor(elevation_m)
@@ -266,6 +270,7 @@ def estimate_flood_risk(
         horizon_hours=safe_hours,
         weather_mode=weather_mode,
         reference_time=reference_time,
+        demo_rainfall=demo_rainfall,
     )
     upstream_norm = upstream["upstream_rain_index_norm"]
 

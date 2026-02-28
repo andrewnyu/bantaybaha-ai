@@ -3,7 +3,7 @@ from django.views.decorators.http import require_GET
 
 from .risk_engine import estimate_flood_risk
 from .risk_area import build_risk_area_payload
-from weather.client import parse_reference_time
+from weather.client import parse_demo_rainfall_values, parse_reference_time
 
 
 def _normalize_weather_mode(raw_mode: str | None) -> str:
@@ -12,6 +12,8 @@ def _normalize_weather_mode(raw_mode: str | None) -> str:
         return "live"
     if normalized in {"historical", "history", "past"}:
         return "historical"
+    if normalized == "demo":
+        return "demo"
     return normalized
 
 
@@ -22,6 +24,8 @@ def risk_api(request):
     hours = request.GET.get("hours", "3")
     weather_mode = _normalize_weather_mode(request.GET.get("weather_mode"))
     reference_time = request.GET.get("reference_time")
+    demo_rainfall_raw = request.GET.get("demo_rainfall")
+    demo_rainfall: list[float] | None = None
 
     if lat is None or lng is None:
         return JsonResponse({"error": "lat and lng are required"}, status=400)
@@ -46,11 +50,16 @@ def risk_api(request):
             reference_epoch = parse_reference_time(reference_time)
         except ValueError as exc:
             return JsonResponse({"error": str(exc)}, status=400)
+    elif weather_mode == "demo":
+        try:
+            demo_rainfall = parse_demo_rainfall_values(demo_rainfall_raw)
+        except ValueError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
 
-    if weather_mode != "live" and weather_mode != "historical":
+    if weather_mode not in {"live", "historical", "demo"}:
         return JsonResponse(
             {
-                "error": "weather_mode must be 'live' or 'historical'"
+                "error": "weather_mode must be 'live', 'historical', or 'demo'"
             },
             status=400,
         )
@@ -61,6 +70,7 @@ def risk_api(request):
         hours_i,
         weather_mode=weather_mode,
         reference_time=reference_epoch,
+        demo_rainfall=demo_rainfall,
     )
     return JsonResponse(payload)
 

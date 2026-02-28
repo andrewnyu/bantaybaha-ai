@@ -23,4 +23,6 @@ def run_chat_agent(message: str, context: ChatContext) -> dict:
         lng=context.lng,
         dest_lat=context.dest_lat,
         dest_lng=context.dest_lng,
+        weather_mode="live",
+        demo_rainfall=None,
     )

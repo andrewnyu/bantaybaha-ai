@@ -1,4 +1,6 @@
 import math
+import json
+import hashlib
 import time
 from functools import lru_cache
 from datetime import datetime
@@ -11,14 +13,79 @@ OPENWEATHER_URL = "https://api.openweathermap.org/data/3.0/onecall"
 OPENWEATHER_TIMEMACHINE_URL = "https://api.openweathermap.org/data/3.0/onecall/timemachine"
 OPENWEATHER_TIMEOUT_SECONDS = 5
 WEATHER_CACHE_SECONDS = 600
+DEMO_HOURS_LIMIT = 6
 
 
 def clamp(value: float, min_value: float, max_value: float) -> float:
     return max(min_value, min(max_value, value))
 
 
-def _hourly_cache_key(lat: float, lng: float, mode: str = "live", reference_time: int | None = None) -> str:
-    return f"{round(lat, 5)}:{round(lng, 5)}:{mode}:{reference_time or 'now'}"
+def _demo_rainfall_cache_key(demo_rainfall: list[float] | None) -> str:
+    if not demo_rainfall:
+        return "demo:none"
+
+    payload = json.dumps([round(float(v), 1) for v in demo_rainfall], separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+
+
+def _hourly_cache_key(
+    lat: float,
+    lng: float,
+    mode: str = "live",
+    reference_time: int | None = None,
+    demo_rainfall: list[float] | None = None,
+) -> str:
+    return (
+        f"{round(lat, 5)}:{round(lng, 5)}:{mode}:"
+        f"{reference_time or 'now'}:{_demo_rainfall_cache_key(demo_rainfall)}"
+    )
+
+
+def parse_demo_rainfall_values(raw_demo_rainfall: object) -> list[float]:
+    if raw_demo_rainfall is None:
+        return []
+
+    items: list
+    if isinstance(raw_demo_rainfall, str):
+        normalized = raw_demo_rainfall.strip()
+        if not normalized:
+            return []
+
+        if normalized.startswith("[") and normalized.endswith("]"):
+            try:
+                parsed = json.loads(normalized)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    "demo_rainfall must be comma-separated values or a JSON array, e.g. '10,22,45' or '[10,22,45]'"
+                ) from exc
+
+            if not isinstance(parsed, list):
+                raise ValueError("demo_rainfall must be a list when using JSON array syntax.")
+
+            items = parsed
+        else:
+            items = normalized.split(",")
+    elif isinstance(raw_demo_rainfall, (list, tuple)):
+        items = list(raw_demo_rainfall)
+    elif isinstance(raw_demo_rainfall, (int, float)):
+        items = [raw_demo_rainfall]
+    else:
+        raise ValueError("demo_rainfall must be a comma string, JSON array, or list of numbers.")
+
+    values: list[float] = []
+    for item in items:
+        try:
+            value = float(item)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "demo_rainfall contains invalid numeric values. Use comma-separated non-negative numbers only."
+            ) from exc
+
+        if value < 0 or not math.isfinite(value):
+            raise ValueError("demo_rainfall must contain non-negative numeric values.")
+        values.append(round(value, 1))
+
+    return values[:DEMO_HOURS_LIMIT]
 
 
 _hourly_cache: dict[str, tuple[float, list[float]]] = {}
@@ -77,10 +144,30 @@ def get_hourly_rain(
     hours: int = 6,
     weather_mode: str = "live",
     reference_time: str | int | float | None = None,
+    demo_rainfall: object | None = None,
 ) -> list[float]:
     safe_hours = max(1, min(6, int(hours)))
     mode = (str(weather_mode).strip().lower() or "live")
     is_historical = mode == "historical"
+    is_demo = mode == "demo"
+    demo_values: list[float] = []
+    if is_demo:
+        demo_values = parse_demo_rainfall_values(demo_rainfall)
+        # Normalize early so we return deterministic, deterministic demo behavior regardless of source location.
+        if len(demo_values) < safe_hours:
+            demo_values = demo_values + [0.0] * (safe_hours - len(demo_values))
+        demo_values = demo_values[:safe_hours]
+        key = _hourly_cache_key(lat, lng, "demo", None, demo_values)
+        cached = _hourly_cache.get(key)
+        now = time.time()
+        if cached:
+            cached_at, cached_values = cached
+            if now - cached_at < WEATHER_CACHE_SECONDS and len(cached_values) >= safe_hours:
+                return [round(float(v), 1) for v in cached_values[:safe_hours]]
+
+        _hourly_cache[key] = (now, demo_values)
+        return demo_values
+
     reference_epoch: int | None = parse_reference_time(reference_time) if is_historical else None
     key = _hourly_cache_key(lat, lng, "historical" if is_historical else "live", reference_epoch)
     now = time.time()
@@ -136,6 +223,8 @@ def get_hourly_rain(
         hourly = [round(float(v), 1) for v in values[:safe_hours]]
         _hourly_cache[key] = (now, hourly)
         return hourly
+    except ValueError:
+        raise
     except Exception:
         hourly = _fallback_hourly_rain(lat, lng, safe_hours, reference_epoch)
         _hourly_cache[key] = (now, hourly)
@@ -148,6 +237,7 @@ def get_hourly_rain_sum(
     hours: int = 6,
     weather_mode: str = "live",
     reference_time: str | int | float | None = None,
+    demo_rainfall: object | None = None,
 ) -> float:
     return round(
         sum(
@@ -157,6 +247,7 @@ def get_hourly_rain_sum(
                 hours=hours,
                 weather_mode=weather_mode,
                 reference_time=reference_time,
+                demo_rainfall=demo_rainfall,
             )
         ),
         1,

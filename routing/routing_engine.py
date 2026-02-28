@@ -117,6 +117,7 @@ def compute_safe_route(
     hours: int = 3,
     weather_mode: str = "live",
     reference_time: str | int | float | None = None,
+    demo_rainfall: object | None = None,
 ) -> dict:
     safe_hours = int(clamp(hours, 1, 6))
     graph = load_graph()
@@ -130,6 +131,7 @@ def compute_safe_route(
         safe_hours,
         weather_mode=weather_mode,
         reference_time=reference_time,
+        demo_rainfall=demo_rainfall,
     )
     upstream_summary = compute_upstream_rain_index(
         lat=origin_lat,
@@ -137,6 +139,7 @@ def compute_safe_route(
         horizon_hours=safe_hours,
         weather_mode=weather_mode,
         reference_time=reference_time,
+        demo_rainfall=demo_rainfall,
     )
 
     add_edge_hazard_scores(

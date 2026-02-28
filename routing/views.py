@@ -1,6 +1,6 @@
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET
-from weather.client import parse_reference_time
+from weather.client import parse_demo_rainfall_values, parse_reference_time
 
 from .routing_engine import compute_safe_route
 
@@ -11,6 +11,8 @@ def _normalize_weather_mode(raw_mode: str | None) -> str:
         return "live"
     if normalized in {"historical", "history", "past"}:
         return "historical"
+    if normalized == "demo":
+        return "demo"
     return normalized
 
 
@@ -24,6 +26,8 @@ def safe_route_api(request):
         hours = int(request.GET.get("hours", "3"))
         weather_mode = _normalize_weather_mode(request.GET.get("weather_mode"))
         reference_time = request.GET.get("reference_time")
+        demo_rainfall_raw = request.GET.get("demo_rainfall")
+        demo_rainfall = None
     except (TypeError, ValueError):
         return JsonResponse(
             {
@@ -44,10 +48,17 @@ def safe_route_api(request):
             reference_epoch = parse_reference_time(reference_time)
         except ValueError as exc:
             return JsonResponse({"error": str(exc)}, status=400)
+    elif weather_mode == "demo":
+        try:
+            demo_rainfall = parse_demo_rainfall_values(demo_rainfall_raw)
+        except ValueError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+        reference_epoch = None
     elif weather_mode != "live":
-        return JsonResponse({"error": "weather_mode must be 'live' or 'historical'"}, status=400)
+        return JsonResponse({"error": "weather_mode must be 'live', 'historical', or 'demo'"}, status=400)
     else:
         reference_epoch = None
+        demo_rainfall = None
 
     mode = request.GET.get("mode", "safest").lower()
     if mode in {"fast", "fastest"}:
@@ -67,6 +78,7 @@ def safe_route_api(request):
             hours=hours,
             weather_mode=weather_mode,
             reference_time=reference_epoch,
+            demo_rainfall=demo_rainfall,
         )
     except Exception as exc:
         return JsonResponse({"error": str(exc)}, status=500)

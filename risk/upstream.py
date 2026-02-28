@@ -64,6 +64,7 @@ def compute_upstream_rain_index(
     horizon_hours: int = 6,
     weather_mode: str = "live",
     reference_time: str | int | float | None = None,
+    demo_rainfall: object | None = None,
 ) -> dict:
     horizon_hours = int(clamp(horizon_hours, 1, 6))
     river_graph = _load_river_graph()
@@ -112,6 +113,7 @@ def compute_upstream_rain_index(
             horizon_hours,
             weather_mode=weather_mode,
             reference_time=reference_time,
+            demo_rainfall=demo_rainfall,
         )
         distance = float(distance_m)
         weight = math.exp(-distance / DECAY_DISTANCE_M)

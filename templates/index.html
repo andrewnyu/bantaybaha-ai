@@ -20,7 +20,8 @@
       <span class="subtitle">Flood Early Warning · Negros Island</span>
     </div>
     <nav class="tab-nav">
-      <a class="tab-link active" href="/">Home</a>
+      <a class="tab-link active" href="#" data-tab="home">Home</a>
+      <a class="tab-link" href="#" data-tab="demo">Demo Weather (For Testing)</a>
     </nav>
     <p>Tap the map, check flood risk, then use chat for evacuation and routing questions.</p>
   </header>
@@ -45,32 +46,71 @@
     </section>
 
     <section class="control-panel">
-      <div class="card google-card chat-card" id="chatCard" data-openai-configured="{{ openai_configured|yesno:'1,0' }}">
-        <div class="status-flags" id="statusFlags"></div>
-        <h2>Flood Assistant</h2>
-        <p class="chat-hint">
-          You can chat in English, Tagalog, Cebuano, or Ilonggo (default English).
-        </p>
-        <div class="chat-suggestions" id="chatSuggestions">
-          <button type="button" class="chat-suggestion" data-message="check risk">
-            Check flood risk
-          </button>
-          <button type="button" class="chat-suggestion" data-message="Find nearest evacuation center.">
-            Nearest evacuation center
-          </button>
-          <button type="button" class="chat-suggestion" data-message="Show safe route to nearest evacuation center.">
-            Safe route to nearest center
-          </button>
-          <button type="button" class="chat-suggestion" data-message="Show fastest route to nearest evacuation center.">
-            Fastest route to nearest center
-          </button>
+      <section class="tab-panel active" data-tab-panel="home">
+        <div class="card google-card chat-card" id="chatCard" data-openai-configured="{{ openai_configured|yesno:'1,0' }}">
+          <div class="status-flags" id="statusFlags"></div>
+          <h2>Flood Assistant</h2>
+          <p class="chat-hint">
+            You can chat in English, Tagalog, Cebuano, or Ilonggo (default English).
+          </p>
+          <div class="chat-suggestions" id="chatSuggestions">
+            <button type="button" class="chat-suggestion" data-message="check risk">
+              Check flood risk
+            </button>
+            <button type="button" class="chat-suggestion" data-message="Find nearest evacuation center.">
+              Nearest evacuation center
+            </button>
+            <button type="button" class="chat-suggestion" data-message="Show safe route to nearest evacuation center.">
+              Safe route to nearest center
+            </button>
+            <button type="button" class="chat-suggestion" data-message="Show fastest route to nearest evacuation center.">
+              Fastest route to nearest center
+            </button>
+          </div>
+          <div id="chatLog" class="chat-log"></div>
+          <form id="chatForm" class="chat-composer">
+            <input id="chatInput" type="text" placeholder="Ask for check risk, nearest center, safe route..." />
+            <button id="chatSendBtn" type="submit" class="send-btn">Send</button>
+          </form>
         </div>
-        <div id="chatLog" class="chat-log"></div>
-        <form id="chatForm" class="chat-composer">
-          <input id="chatInput" type="text" placeholder="Ask for check risk, nearest center, safe route..." />
-          <button id="chatSendBtn" type="submit" class="send-btn">Send</button>
-        </form>
-      </div>
+      </section>
+
+      <section class="tab-panel" data-tab-panel="demo">
+        <div class="card settings-card">
+          <h2>Demo Weather (For Testing)</h2>
+          <p id="demoWeatherContext" class="muted demo-context">Set weather scenario for selected location.</p>
+          <div class="settings-row">
+            <label class="settings-toggle" for="demoWeatherToggle">
+              <input id="demoWeatherToggle" type="checkbox" />
+              Enable demo weather mode
+            </label>
+            <button id="clearDemoRainfallBtn" type="button" class="secondary-btn">Clear</button>
+          </div>
+          <label class="muted" for="demoHoursInput">Forecast window (hours)</label>
+          <input
+            id="demoHoursInput"
+            type="number"
+            min="1"
+            max="6"
+            step="1"
+            value="3"
+            aria-label="Demo forecast window"
+          />
+          <label class="muted" for="demoRainfallInput">Manual rainfall series (mm/hr)</label>
+          <input
+            id="demoRainfallInput"
+            type="text"
+            placeholder="10,22,45,30,12,5"
+            maxlength="120"
+            aria-label="Manual hourly rainfall"
+          />
+          <p class="muted settings-helper">
+            Enter up to 6 hourly rainfall values. Missing hours are padded with 0.
+            Empty input uses all zeros.
+          </p>
+          <p id="weatherSourceStatus" class="settings-source-status muted">Current source: live OpenWeather forecast</p>
+        </div>
+      </section>
     </section>
   </main>
 

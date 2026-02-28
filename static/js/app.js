@@ -18,8 +18,17 @@ const locationSearchInput = document.getElementById("locationSearchInput");
 const locationSearchBtn = document.getElementById("locationSearchBtn");
 const myLocationBtn = document.getElementById("myLocationBtn");
 const selectedLocationLabel = document.getElementById("selectedLocationLabel");
+const demoWeatherToggle = document.getElementById("demoWeatherToggle");
+const demoRainfallInput = document.getElementById("demoRainfallInput");
+const demoHoursInput = document.getElementById("demoHoursInput");
+const demoWeatherContext = document.getElementById("demoWeatherContext");
+const clearDemoRainfallBtn = document.getElementById("clearDemoRainfallBtn");
+const weatherSourceStatus = document.getElementById("weatherSourceStatus");
+const tabLinks = document.querySelectorAll(".tab-link");
+const tabPanels = document.querySelectorAll("[data-tab-panel]");
 
 const isOpenAIConfigured = chatCard?.dataset?.openaiConfigured === "1";
+const SETTINGS_STORAGE_KEY = "bahawatch_weather_settings_v1";
 
 let map = null;
 let mapEnabled = false;
@@ -32,6 +41,11 @@ let riskCircle = null;
 const chatHistory = [];
 let selectedAddress = { barangay: "n/a", city: "n/a", raw: {} };
 let reverseLookupRequestId = 0;
+let weatherSettings = {
+  demoModeEnabled: false,
+  demoRainfall: "10,22,45,30,12,5",
+  forecastHours: 3,
+};
 
 const shownWarnings = new Set();
 
@@ -75,6 +89,165 @@ const addStatusFlag = (message, type = "warn") => {
   statusFlags.appendChild(flag);
 };
 
+const loadWeatherSettings = () => {
+  const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+  if (!raw) {
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      return;
+    }
+
+    weatherSettings.demoModeEnabled = Boolean(parsed.demoModeEnabled);
+    if (typeof parsed.demoRainfall === "string") {
+      weatherSettings.demoRainfall = parsed.demoRainfall;
+    }
+    if (Number.isFinite(parsed.forecastHours)) {
+      weatherSettings.forecastHours = Math.min(6, Math.max(1, Number(parsed.forecastHours)));
+    }
+  } catch (error) {
+    // Keep defaults.
+  }
+};
+
+const saveWeatherSettings = () => {
+  localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(weatherSettings));
+};
+
+const parseDemoRainfallValues = (value) => {
+  const raw = (value || "").trim();
+  if (!raw) {
+    return [];
+  }
+
+  let items = [];
+  if (raw.startsWith("[") && raw.endsWith("]")) {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      throw new Error("Demo rainfall JSON must be an array.");
+    }
+    items = parsed;
+  } else {
+    items = raw.split(",");
+  }
+
+  const values = [];
+  for (const item of items) {
+    const token = String(item).trim();
+    if (!token) {
+      throw new Error("Demo rainfall list contains empty values.");
+    }
+    const next = Number(token);
+    if (!Number.isFinite(next)) {
+      throw new Error("Invalid demo rainfall value. Use numbers only.");
+    }
+    if (next < 0) {
+      throw new Error("Demo rainfall values must be non-negative.");
+    }
+    values.push(next);
+  }
+
+  return values.slice(0, 6).map((v) => Number(v.toFixed(1)));
+};
+
+const formatRainfallPreview = (values) => {
+  if (!Array.isArray(values) || values.length === 0) {
+    return "0 mm/hr";
+  }
+
+  if (values.length > 3) {
+    return `${values.slice(0, 3).join(", ")}... (${values.length}h)`;
+  }
+
+  return values.join(", ");
+};
+
+const parseDemoHours = (value, fallback = 3) => {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.min(6, Math.max(1, parsed));
+};
+
+const buildDemoLocationLabel = () => {
+  const barangay = selectedAddress?.barangay || "n/a";
+  const city = selectedAddress?.city || "n/a";
+
+  if (barangay !== "n/a" && city !== "n/a") {
+    return `${barangay}, ${city}`;
+  }
+
+  if (barangay !== "n/a") {
+    return barangay;
+  }
+
+  if (city !== "n/a") {
+    return city;
+  }
+
+  const latText = Number.isFinite(selectedPoint.lat)
+    ? selectedPoint.lat.toFixed(4)
+    : "n/a";
+  const lngText = Number.isFinite(selectedPoint.lng)
+    ? selectedPoint.lng.toFixed(4)
+    : "n/a";
+  return `${latText}, ${lngText}`;
+};
+
+const updateDemoContextText = () => {
+  if (!demoWeatherContext) {
+    return;
+  }
+
+  const hours = parseDemoHours(weatherSettings.forecastHours, 3);
+  demoWeatherContext.textContent = `Set weather in ${buildDemoLocationLabel()} for next ${hours} hour${hours > 1 ? "s" : ""}.`;
+};
+
+const syncWeatherSettingsUI = () => {
+  const clampedHours = parseDemoHours(weatherSettings.forecastHours, 3);
+  weatherSettings.forecastHours = clampedHours;
+
+  if (demoWeatherToggle) {
+    demoWeatherToggle.checked = Boolean(weatherSettings.demoModeEnabled);
+  }
+  if (demoHoursInput) {
+    demoHoursInput.disabled = !Boolean(weatherSettings.demoModeEnabled);
+    demoHoursInput.value = String(clampedHours);
+  }
+  if (demoRainfallInput) {
+    demoRainfallInput.disabled = !Boolean(weatherSettings.demoModeEnabled);
+    if (demoRainfallInput.value !== weatherSettings.demoRainfall) {
+      demoRainfallInput.value = weatherSettings.demoRainfall;
+    }
+  }
+  if (clearDemoRainfallBtn) {
+    clearDemoRainfallBtn.disabled = !Boolean(weatherSettings.demoModeEnabled);
+  }
+
+  if (weatherSettings.demoModeEnabled) {
+    try {
+      const parsed = parseDemoRainfallValues(weatherSettings.demoRainfall);
+      if (weatherSourceStatus) {
+        weatherSourceStatus.textContent = `Current source: DEMO (${formatRainfallPreview(parsed)}) for ${clampedHours}h`;
+      }
+    } catch (error) {
+      if (weatherSourceStatus) {
+        weatherSourceStatus.textContent = `Current source: DEMO (${clampedHours}h, invalid input).`;
+      }
+    }
+  } else {
+    if (weatherSourceStatus) {
+      weatherSourceStatus.textContent = "Current source: live OpenWeather forecast";
+    }
+  }
+
+  updateDemoContextText();
+};
+
 const formatAddressLabel = (address = {}) => {
   const barangay =
     address.barangay ||
@@ -105,6 +278,7 @@ const updateSelectedLocationLabel = () => {
   const barangay = selectedAddress?.barangay || "n/a";
   const city = selectedAddress?.city || "n/a";
   selectedLocationLabel.textContent = `Barangay: ${barangay}, City: ${city} (${lat}, ${lng})`;
+  updateDemoContextText();
 };
 
 const resolveReverseAddress = async (lat, lng, requestId) => {
@@ -154,6 +328,7 @@ const resolveReverseAddress = async (lat, lng, requestId) => {
     };
     addStatusFlag("Could not resolve address for this location.", "warn");
     updateSelectedLocationLabel();
+    updateDemoContextText();
   }
 };
 
@@ -262,8 +437,42 @@ const initMap = () => {
   initFallbackWarnings();
 };
 
+const switchTab = (selectedTab) => {
+  if (!tabLinks.length) {
+    return;
+  }
+
+  tabLinks.forEach((tab) => {
+    const isActive = tab.getAttribute("data-tab") === selectedTab;
+    tab.classList.toggle("active", isActive);
+  });
+
+  tabPanels.forEach((panel) => {
+    const isPanelActive = panel.getAttribute("data-tab-panel") === selectedTab;
+    panel.classList.toggle("active", isPanelActive);
+  });
+};
+
+loadWeatherSettings();
+syncWeatherSettingsUI();
 initMap();
 updateSelectedLocationLabel();
+if (tabLinks.length > 0) {
+  const activeTab = document.querySelector('.tab-link.active')?.getAttribute("data-tab") || "home";
+  switchTab(activeTab);
+}
+
+if (tabLinks.length > 0) {
+  tabLinks.forEach((link) => {
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      const targetTab = link.getAttribute("data-tab");
+      if (targetTab) {
+        switchTab(targetTab);
+      }
+    });
+  });
+}
 
 if (locationSearchInput && locationSearchBtn) {
   const runSearch = () => {
@@ -281,6 +490,40 @@ if (locationSearchInput && locationSearchBtn) {
 
 if (myLocationBtn) {
   myLocationBtn.addEventListener("click", getCurrentLocation);
+}
+
+if (demoWeatherToggle) {
+  demoWeatherToggle.addEventListener("change", () => {
+    weatherSettings.demoModeEnabled = demoWeatherToggle.checked;
+    saveWeatherSettings();
+    syncWeatherSettingsUI();
+  });
+}
+
+if (demoRainfallInput) {
+  demoRainfallInput.addEventListener("input", () => {
+    weatherSettings.demoRainfall = demoRainfallInput.value;
+    saveWeatherSettings();
+    syncWeatherSettingsUI();
+  });
+}
+
+if (demoHoursInput) {
+  demoHoursInput.addEventListener("input", () => {
+    weatherSettings.forecastHours = parseDemoHours(demoHoursInput.value, 3);
+    saveWeatherSettings();
+    syncWeatherSettingsUI();
+  });
+}
+
+if (clearDemoRainfallBtn) {
+  clearDemoRainfallBtn.addEventListener("click", () => {
+    weatherSettings.demoRainfall = "";
+    weatherSettings.demoModeEnabled = true;
+    saveWeatherSettings();
+    syncWeatherSettingsUI();
+    addStatusFlag("Demo rainfall values cleared (will be treated as zeros).", "warn");
+  });
 }
 
 chatForm.addEventListener("submit", submitChat);
@@ -407,8 +650,22 @@ async function submitChat(event, messageOverride) {
     message,
     lat: selectedPoint.lat,
     lng: selectedPoint.lng,
+    hours: parseDemoHours(weatherSettings.forecastHours, 3),
     chat_history: chatHistory.slice(-10),
+    weather_mode: demoWeatherToggle?.checked ? "demo" : "live",
   };
+
+  if (demoWeatherToggle?.checked) {
+    try {
+      payload.demo_rainfall = parseDemoRainfallValues(demoRainfallInput?.value);
+    } catch (error) {
+      addStatusFlag(error.message || "Invalid demo rainfall values.", "error");
+      chatSendBtn.disabled = false;
+      return;
+    }
+  } else {
+    payload.demo_rainfall = [];
+  }
 
   try {
     const response = await fetch("/api/chat/", {

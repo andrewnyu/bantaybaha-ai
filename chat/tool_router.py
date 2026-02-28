@@ -283,16 +283,40 @@ def _detect_tool_intents(message: str) -> tuple[bool, bool, bool, bool]:
     return include_risk, include_evac, include_route, include_upstream
 
 
-def tool_get_risk(lat: float, lng: float, hours: int = 3) -> dict:
-    payload = estimate_flood_risk(lat=lat, lng=lng, hours=hours)
+def tool_get_risk(
+    lat: float,
+    lng: float,
+    hours: int = 3,
+    weather_mode: str = "live",
+    demo_rainfall: list[float] | None = None,
+) -> dict:
+    payload = estimate_flood_risk(
+        lat=lat,
+        lng=lng,
+        hours=hours,
+        weather_mode=weather_mode,
+        demo_rainfall=demo_rainfall,
+    )
     return {
         "tool": "tool_get_risk",
         "result": payload,
     }
 
 
-def tool_get_upstream_summary(lat: float, lng: float, hours: int = 3) -> dict:
-    payload = compute_upstream_rain_index(lat=lat, lng=lng, horizon_hours=hours)
+def tool_get_upstream_summary(
+    lat: float,
+    lng: float,
+    hours: int = 3,
+    weather_mode: str = "live",
+    demo_rainfall: list[float] | None = None,
+) -> dict:
+    payload = compute_upstream_rain_index(
+        lat=lat,
+        lng=lng,
+        horizon_hours=hours,
+        weather_mode=weather_mode,
+        demo_rainfall=demo_rainfall,
+    )
     return {
         "tool": "tool_get_upstream_summary",
         "result": payload,
@@ -327,7 +351,10 @@ def tool_get_safe_route(
     origin_lng: float,
     dest_lat: float,
     dest_lng: float,
+    hours: int = 3,
     mode: str = "safest",
+    weather_mode: str = "live",
+    demo_rainfall: list[float] | None = None,
 ) -> dict:
     safety_weight = 2.0 if mode in {"safe", "safest"} else 0.0
     payload = compute_safe_route(
@@ -335,7 +362,10 @@ def tool_get_safe_route(
         origin_lng=origin_lng,
         dest_lat=dest_lat,
         dest_lng=dest_lng,
+        hours=hours,
         safety_weight=safety_weight,
+        weather_mode=weather_mode,
+        demo_rainfall=demo_rainfall,
     )
     payload["mode"] = "safest" if safety_weight > 0 else "fastest"
     return {
@@ -370,13 +400,27 @@ def _build_tool_plan(message: str, default_hours: int, need_route: bool) -> list
     if include_evac:
         plan.append({"tool": "tool_get_evac_centers", "arguments": {}})
     if include_route:
-        plan.append({"tool": "tool_get_safe_route", "arguments": {"mode": route_mode}})
+        plan.append(
+            {
+                "tool": "tool_get_safe_route",
+                "arguments": {"mode": route_mode, "hours": default_hours},
+            }
+        )
 
     return plan
 
 
 def _plan_actions(payload: list[dict]) -> list[str]:
     return [item.get("tool") for item in payload]
+
+
+def _coerce_hours(raw_hours: int, default_hours: int) -> int:
+    try:
+        value = int(raw_hours)
+    except (TypeError, ValueError):
+        return default_hours
+
+    return max(1, min(6, value))
 
 
 def _normalize_language(language: str | None) -> str:
@@ -751,6 +795,9 @@ def run_tool_router(
     language: str | None = None,
     tool_calls: list[dict] | None = None,
     chat_history: list[dict[str, str]] | None = None,
+    weather_mode: str = "live",
+    hours: int = 3,
+    demo_rainfall: list[float] | None = None,
 ) -> dict:
     lat_lng_pairs = parse_coordinate_pairs(message)
     if lat_lng_pairs:
@@ -758,8 +805,12 @@ def run_tool_router(
         if len(lat_lng_pairs) >= 2:
             dest_lat, dest_lng = lat_lng_pairs[1]
 
-    default_hours = 3
-    requested_hours = 3
+    try:
+        default_hours = int(hours)
+    except (TypeError, ValueError):
+        default_hours = 3
+    default_hours = max(1, min(6, default_hours))
+    requested_hours = default_hours
     if tool_calls is None:
         tool_calls = _build_tool_plan(message, requested_hours, dest_lat is not None and dest_lng is not None)
 
@@ -789,18 +840,36 @@ def run_tool_router(
         args = tool_call.get("arguments", {}) if isinstance(tool_call, dict) else {}
 
         if tool_name == "tool_get_risk":
-            hours = int(args.get("hours", default_hours))
-            tool_output = tool_get_risk(lat=lat, lng=lng, hours=hours)
+            hours = _coerce_hours(args.get("hours", default_hours), default_hours)
+            tool_output = tool_get_risk(
+                lat=lat,
+                lng=lng,
+                hours=hours,
+                weather_mode=weather_mode,
+                demo_rainfall=demo_rainfall,
+            )
             tool_outputs.append(tool_output)
             tool_results["risk"] = tool_output["result"]
             if not args.get("skip_upstream", False):
-                upstream_output = tool_get_upstream_summary(lat=lat, lng=lng, hours=hours)
+                upstream_output = tool_get_upstream_summary(
+                    lat=lat,
+                    lng=lng,
+                    hours=hours,
+                    weather_mode=weather_mode,
+                    demo_rainfall=demo_rainfall,
+                )
                 tool_outputs.append(upstream_output)
                 tool_results["upstream"] = upstream_output["result"]
 
         elif tool_name == "tool_get_upstream_summary":
-            hours = int(args.get("hours", default_hours))
-            tool_output = tool_get_upstream_summary(lat=lat, lng=lng, hours=hours)
+            hours = _coerce_hours(args.get("hours", default_hours), default_hours)
+            tool_output = tool_get_upstream_summary(
+                lat=lat,
+                lng=lng,
+                hours=hours,
+                weather_mode=weather_mode,
+                demo_rainfall=demo_rainfall,
+            )
             tool_outputs.append(tool_output)
             tool_results["upstream"] = tool_output["result"]
 
@@ -844,12 +913,16 @@ def run_tool_router(
                 route_is_evacuation_center = False
 
             mode = args.get("mode", "safest")
+            route_hours = _coerce_hours(args.get("hours", default_hours), default_hours)
             route_payload = tool_get_safe_route(
                 origin_lat=lat,
                 origin_lng=lng,
                 dest_lat=dest_lat,
                 dest_lng=dest_lng,
                 mode=mode,
+                hours=route_hours,
+                weather_mode=weather_mode,
+                demo_rainfall=demo_rainfall,
             )
             route_payload["result"]["route_summary"] = _build_route_landmark_summary(
                 route_payload["result"],
