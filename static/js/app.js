@@ -1051,7 +1051,7 @@ const appendRiskMeterBubble = (riskPayload) => {
     knee: "Knee level",
     chest: "Chest level",
     "above-head": "Above-head level",
-    "2-storey-height": "2-person height",
+    "2-storey-height": "Person height (slightly above)",
   };
 
   const score = Math.max(0, Math.min(100, Math.round(scoreRaw)));
@@ -1090,7 +1090,7 @@ const appendRiskMeterBubble = (riskPayload) => {
         <span class="chat-risk-ruler-mark mark-knee" style="bottom:20%"><span>knee 0.2m</span></span>
         <span class="chat-risk-ruler-mark mark-chest" style="bottom:45%"><span>chest 0.5m</span></span>
         <span class="chat-risk-ruler-mark mark-head" style="bottom:80%"><span>head 1.0m</span></span>
-        <span class="chat-risk-ruler-mark mark-roof" style="top:0%"><span>2m</span></span>
+        <span class="chat-risk-ruler-mark mark-roof" style="top:0%"><span>1.8m person height</span></span>
       </div>
       <div class="chat-risk-ruler-person" aria-hidden="true">🧍</div>
     </div>

@@ -605,13 +605,16 @@ def _build_conversational_reply(
                 "knee": "knee level",
                 "chest": "chest level",
                 "above-head": "above-head level",
-                "2-storey-height": "2-storey height",
+                "2-storey-height": "person height (slightly above)",
             }
+            should_evac_now = water_zone in {"above-head", "2-storey-height"}
             if isinstance(water_level, (int, float)) and water_zone:
                 readable_zone = zone_map.get(str(water_zone), str(water_zone))
                 parts.append(
                     f"Estimated water level: {water_level:.2f} m ({readable_zone})."
                 )
+                if should_evac_now:
+                    parts.append("Above-head level is reached. Evacuate immediately.")
 
             if risk_score >= 65:
                 parts.append(
