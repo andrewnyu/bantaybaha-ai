@@ -1,4 +1,5 @@
 import json
+import pickle
 from pathlib import Path
 import sys
 
@@ -131,7 +132,8 @@ def main() -> None:
         print("River graph is empty. Check data source.")
         return
 
-    nx.write_gpickle(graph, RIVER_GRAPH_PATH)
+    with RIVER_GRAPH_PATH.open("wb") as handle:
+        pickle.dump(graph, handle, protocol=pickle.HIGHEST_PROTOCOL)
     print(f"Wrote {RIVER_GRAPH_PATH}")
 
     points = build_and_store_samples(graph)

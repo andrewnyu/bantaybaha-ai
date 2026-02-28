@@ -1,4 +1,5 @@
 import math
+import pickle
 from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
@@ -42,7 +43,14 @@ def _load_river_graph() -> nx.DiGraph | None:
     try:
         return nx.read_gpickle(RIVER_GRAPH_PATH)
     except Exception:
-        return None
+        try:
+            with RIVER_GRAPH_PATH.open("rb") as handle:
+                payload = pickle.load(handle)
+            if isinstance(payload, nx.Graph):
+                return payload
+            return None
+        except Exception:
+            return None
 
 
 def _travel_distance_to_max(horizon_hours: int) -> float:
