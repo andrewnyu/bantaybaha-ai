@@ -1,12 +1,15 @@
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_GET
+from django.conf import settings
 
 from .services import nearest_evacuation_centers
 
 
 def index(request):
-    return render(request, "index.html")
+    openai_key = str(getattr(settings, "OPENAI_API_KEY", "")).strip()
+    openai_configured = bool(openai_key) and openai_key != "your_key_here"
+    return render(request, "index.html", {"openai_configured": openai_configured})
 
 
 @require_GET

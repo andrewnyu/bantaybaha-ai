@@ -110,7 +110,7 @@ def _plan_actions(payload: list[dict]) -> list[str]:
 
 def _normalize_language(language: str | None) -> str:
     language = (language or "en").lower().strip()
-    return language if language in {"en", "tl", "ilo"} else "en"
+    return language if language in {"en", "tl", "ilo", "ceb"} else "en"
 
 
 def _extract_number(pattern: str, text: str) -> float | None:
@@ -172,7 +172,11 @@ def _build_conversational_reply(
         risk_high_label = "Panganib ng baha"
         low_risk_intro = (
             f"Walang natukoy na malaking rainfall o upstream impact para sa susunod na {forecast_hours} oras. "
-            f"Sa ngayon, mukhang mababa ang panganib."
+            f"Sa ngayon, mas ligtas ang situwasyon at wala pang malinaw na immediate risk."
+        )
+        no_risk_intro = (
+            f"Walang panganib ng baha sa susunod na {forecast_hours} oras. Walang nakitang ulan at walang malinaw na epekto sa ibaba."
+            " Kung ganoon, panatilihin mo na rin ang vigilansya."
         )
         upstream_label = "Bagay sa itaas na bahagi"
         evac_label = "Pinakamalapit na evacuation center"
@@ -190,6 +194,10 @@ def _build_conversational_reply(
             f"Wala sang signal sang ulan ukon upstream impact para sa sunod nga {forecast_hours} oras. "
             f"Sa subong, nahanap naton nga hilum."
         )
+        no_risk_intro = (
+            f"Wala sang peligro sang baha sa sunod nga {forecast_hours} ka oras. "
+            "Wala namit nga ulan kag wala sang malinawon nga upstream impact."
+        )
         upstream_label = "Pagsulod sang ulan sa pinutikan"
         evac_label = "Pinakadaku nga evacuation center nga duul"
         route_label = "Ruta"
@@ -199,11 +207,34 @@ def _build_conversational_reply(
             "Pwede mo i-sabi: \"check risk\", \"find nearest evacuation center\", o \"safe route to nearest evacuation center\"."
         )
         units_km = "km"
+    elif lang == "ceb":
+        risk_high_label = "Peligro sa baha"
+        low_risk_intro = (
+            f"Walay peligro nga mabantayan sa sunod nga {forecast_hours} ka oras. "
+            f"Sa karon, mura’g stable pa ang lugar."
+        )
+        no_risk_intro = (
+            f"Walay peligro sa baha sa sunod nga {forecast_hours} ka oras. "
+            "Wala’y na-detect nga ulan ug walay klarong epekto gikan sa upstream."
+        )
+        upstream_label = "Pag-ulan sa katunga"
+        evac_label = "Pinakaduol nga evacuation center"
+        route_label = "Agianan"
+        no_data = "Wala pa’y igo nga data para mas klaro ang tubag."
+        default_action = (
+            'Makatabang ko pag-check ug risk sa baha, upstream signals, evacuation centers, ug ruta. '
+            'Sulayi: "check risk", "find nearest evacuation center", o "safe route to nearest evacuation center".'
+        )
+        units_km = "km"
     else:
         risk_high_label = "Flood risk is"
         low_risk_intro = (
             f"I don't see rainfall or upstream impact for the next {forecast_hours} hours. "
             "So there is currently no immediate flood risk signal."
+        )
+        no_risk_intro = (
+            f"No flood risk is expected for the next {forecast_hours} hours. "
+            "No rain or upstream impact was detected in the forecast window."
         )
         upstream_label = "Upstream signal"
         evac_label = "Nearest evacuation center"
@@ -234,7 +265,7 @@ def _build_conversational_reply(
 
         if no_rainfall_impact:
             parts.append(
-                f"{low_risk_intro} "
+                f"{no_risk_intro} "
                 f"Score: {risk_score}/100 ({risk_level})."
             )
         else:
