@@ -134,18 +134,34 @@ def compute_safe_route(
         hazard = float(data.get("hazard_score", 0.0))
         return base_length + (hazard * safety_weight)
 
-    path = nx.shortest_path(
-        local_graph,
-        source=origin_node,
-        target=dest_node,
-        weight=edge_cost,
-    )
+    route_graph = local_graph
+    try:
+        path = nx.shortest_path(
+            route_graph,
+            source=origin_node,
+            target=dest_node,
+            weight=edge_cost,
+        )
+    except nx.NetworkXNoPath:
+        # Fallback to full graph when ego-graph pruning omits a valid route.
+        route_graph = graph.to_undirected()
+        add_edge_hazard_scores(
+            route_graph,
+            rainfall_sample,
+            upstream_summary.get("upstream_rain_index_norm", 0.0),
+        )
+        path = nx.shortest_path(
+            route_graph,
+            source=origin_node,
+            target=dest_node,
+            weight=edge_cost,
+        )
 
     route = []
     total_distance = 0.0
     hazard_exposure = 0.0
     for node_id in path:
-        node_attrs = local_graph.nodes[node_id]
+        node_attrs = route_graph.nodes[node_id]
         route.append(
             {
                 "lat": node_attrs.get("y"),
@@ -156,7 +172,7 @@ def compute_safe_route(
     for index in range(len(path) - 1):
         u = path[index]
         v = path[index + 1]
-        edge_attrs = local_graph.get_edge_data(u, v)
+        edge_attrs = route_graph.get_edge_data(u, v)
 
         if len(edge_attrs) == 1:
             attrs = list(edge_attrs.values())[0]
