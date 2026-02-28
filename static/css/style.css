@@ -359,20 +359,24 @@ button:disabled {
 }
 
 .chat-suggestions {
-  display: grid;
-  gap: 0.4rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.34rem;
   margin-bottom: 0.55rem;
+  margin-top: auto;
 }
 
 .chat-suggestion {
   appearance: none;
-  border: 1px solid #d7dce5;
+  border: 1px solid #dce3f1;
   border-radius: 999px;
-  padding: 0.45rem 0.7rem;
+  padding: 0.26rem 0.62rem;
   background: #eef4ff;
   color: #1f1f1f;
   cursor: pointer;
-  font-size: 0.82rem;
+  font-size: 0.76rem;
+  line-height: 1.1;
+  min-height: 0;
 }
 
 .chat-suggestion:hover {
@@ -449,6 +453,110 @@ button:disabled {
   background: var(--chat-bot);
   color: #050505;
   border-bottom-left-radius: 4px;
+}
+
+.chat-bubble.chat-loading {
+  color: #4a4f58;
+  background: #eef1f6;
+  border: 1px solid #d8dde6;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+}
+
+.chat-loading-spinner {
+  width: 0.75rem;
+  height: 0.75rem;
+  border: 2px solid rgba(74, 79, 88, 0.35);
+  border-top-color: #4a4f58;
+  border-radius: 50%;
+  animation: chatSpin 0.8s linear infinite;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+@keyframes chatSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.chat-bubble.chat-risk-meter {
+  border: 1px solid #c8dbff;
+  background: linear-gradient(180deg, #f8fbff, #f3f7ff);
+  color: #1a1a1a;
+  padding-top: 0.48rem;
+  padding-bottom: 0.48rem;
+}
+
+.chat-risk-meter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+  margin-bottom: 0.42rem;
+}
+
+.chat-risk-track {
+  position: relative;
+  height: 0.52rem;
+  border-radius: 999px;
+  background: rgba(8, 16, 32, 0.08);
+  overflow: hidden;
+}
+
+.chat-risk-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.28s ease;
+}
+
+.chat-risk-fill.risk-low {
+  background: linear-gradient(90deg, #1e8e3e, #4caf50);
+}
+
+.chat-risk-fill.risk-medium {
+  background: linear-gradient(90deg, #fb8c00, #ffb300);
+}
+
+.chat-risk-fill.risk-high {
+  background: linear-gradient(90deg, #e53935, #ef5350);
+}
+
+.chat-risk-level {
+  border-radius: 999px;
+  padding: 0.11rem 0.45rem;
+  font-size: 0.74rem;
+  line-height: 1;
+  border: 1px solid #bfd4ff;
+  background: #eef4ff;
+}
+
+.chat-risk-level.risk-low {
+  border-color: #81c784;
+  background: #e8f5e9;
+  color: #1f5f34;
+}
+
+.chat-risk-level.risk-medium {
+  border-color: #ffcc80;
+  background: #fff3e0;
+  color: #8a5a00;
+}
+
+.chat-risk-level.risk-high {
+  border-color: #ef9a9a;
+  background: #ffebee;
+  color: #8b1e1e;
+}
+
+.chat-risk-meter .chat-meta {
+  margin-top: 0.3rem;
+  color: #6b7280;
+  font-size: 0.74rem;
 }
 
 .evac-center-icon {

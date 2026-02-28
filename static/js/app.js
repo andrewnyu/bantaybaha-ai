@@ -46,6 +46,7 @@ let riskCircle = null;
 const chatHistory = [];
 let selectedAddress = { barangay: "n/a", city: "n/a", raw: {} };
 let reverseLookupRequestId = 0;
+let chatLoadingBubble = null;
 let weatherSettings = {
   demoModeEnabled: false,
   demoRainfall: "10,22,45,30,12,5",
@@ -153,7 +154,38 @@ const saveWeatherSettings = () => {
 };
 
 const parseDemoRainfallValues = (value) => {
-  const raw = (value || "").trim();
+  if (value == null) {
+    return [];
+  }
+
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || value < 0) {
+      throw new Error("Demo rainfall values must be non-negative.");
+    }
+    return [Number(value.toFixed(1))];
+  }
+
+  if (Array.isArray(value)) {
+    const values = [];
+    for (const item of value) {
+      const next = Number(item);
+      if (!Number.isFinite(next)) {
+        throw new Error("Invalid demo rainfall value. Use numbers only.");
+      }
+      if (next < 0) {
+        throw new Error("Demo rainfall values must be non-negative.");
+      }
+      values.push(next);
+    }
+
+    return values.slice(0, 6).map((v) => Number(v.toFixed(1)));
+  }
+
+  if (typeof value !== "string") {
+    throw new Error("Demo rainfall input must be a string, number, or array.");
+  }
+
+  const raw = value.trim();
   if (!raw) {
     return [];
   }
@@ -197,8 +229,8 @@ const normalizeDemoUpstreamNodeKey = (lat, lng) => {
   return `${latValue.toFixed(5)},${lngValue.toFixed(5)}`;
 };
 
-const parseDemoUpstreamWeather = (value) => {
-  const raw = (value || "").trim();
+const parseDemoUpstreamWeather = (value, fallbackRainfall = []) => {
+  const raw = typeof value === "string" ? value.trim() : "";
   if (!raw) {
     return [];
   }
@@ -215,6 +247,8 @@ const parseDemoUpstreamWeather = (value) => {
   }
 
   const cleaned = [];
+  const fallback = Array.isArray(fallbackRainfall) ? fallbackRainfall : [];
+  let fallbackCount = 0;
   for (const entry of parsed) {
     if (!entry || typeof entry !== "object") {
       throw new Error("Each upstream weather entry must be an object.");
@@ -227,12 +261,42 @@ const parseDemoUpstreamWeather = (value) => {
     }
 
     const rawRainfall = entry.demo_rainfall ?? entry.rainfall ?? entry.values ?? [];
-    const parsedRainfall = parseDemoRainfallValues(rawRainfall);
+    let parsedRainfall = [];
+    const hasRainfallValue =
+      rawRainfall !== undefined &&
+      rawRainfall !== null &&
+      !(typeof rawRainfall === "string" && rawRainfall.trim() === "") &&
+      !(Array.isArray(rawRainfall) && rawRainfall.length === 0);
+
+    if (hasRainfallValue) {
+      try {
+        parsedRainfall = parseDemoRainfallValues(rawRainfall);
+      } catch (error) {
+        parsedRainfall = fallback.slice();
+        fallbackCount += 1;
+      }
+    } else if (fallback.length) {
+      parsedRainfall = fallback.slice();
+      fallbackCount += 1;
+    }
+
+    if (!hasRainfallValue && !fallback.length) {
+      parsedRainfall = [];
+    }
+
     cleaned.push({
       lat,
       lng,
       demo_rainfall: parsedRainfall,
     });
+  }
+
+  if (fallbackCount > 0 && demoRainfallInput) {
+    const fallbackText = fallback.length ? "using local demo rainfall" : "with empty values";
+    setDemoTabStatus(
+      `Filled ${fallbackCount} upstream node${fallbackCount > 1 ? "s" : ""} ${fallbackText}.`,
+      "info"
+    );
   }
 
   return cleaned;
@@ -563,7 +627,7 @@ const generateUpstreamNodePayloadFromRisk = async () => {
 
     let currentOverrides = [];
     try {
-      currentOverrides = parseDemoUpstreamWeather(weatherSettings.demoUpstreamWeather);
+      currentOverrides = parseDemoUpstreamWeather(weatherSettings.demoUpstreamWeather, baselineRainfall);
     } catch (error) {
       currentOverrides = [];
     }
@@ -581,7 +645,10 @@ const generateUpstreamNodePayloadFromRisk = async () => {
       return {
         lat: Number(node.lat),
         lng: Number(node.lng),
-        demo_rainfall: overrideMap.get(key) || scenarioProfile || [],
+        demo_rainfall:
+          overrideMap.get(key) ||
+          scenarioProfile ||
+          baselineRainfall.slice(),
       };
     });
 
@@ -825,6 +892,8 @@ if (clearDemoRainfallBtn) {
   });
 }
 
+shuffleChatSuggestions();
+
 chatForm.addEventListener("submit", submitChat);
 chatSuggestions.addEventListener("click", submitSuggestion);
 
@@ -843,6 +912,7 @@ async function submitSuggestion(event) {
   if (!message) {
     return;
   }
+  shuffleChatSuggestions();
   await submitChat(null, message);
 }
 
@@ -927,6 +997,85 @@ function getCurrentLocation() {
   );
 }
 
+const extractRiskResultFromChatResponse = (response) => {
+  if (!response || typeof response !== "object") {
+    return null;
+  }
+
+  const toolOutputs = Array.isArray(response.tool_outputs) ? response.tool_outputs : [];
+  for (const item of toolOutputs) {
+    if (!item || item.tool !== "tool_get_risk") {
+      continue;
+    }
+
+    const result = item.result;
+    if (result && typeof result === "object") {
+      return result;
+    }
+  }
+
+  const mapPayload = response.map_payload;
+  if (mapPayload && mapPayload.type === "risk" && typeof mapPayload.risk_score !== "undefined") {
+    return {
+      risk_score: mapPayload.risk_score,
+      risk_level: mapPayload.risk_level,
+      expected_peak_in_hours: null,
+    };
+  }
+
+  return null;
+};
+
+const getRiskLevelClass = (riskScore) => {
+  if (riskScore >= 65) {
+    return "high";
+  }
+  if (riskScore >= 35) {
+    return "medium";
+  }
+  return "low";
+};
+
+const appendRiskMeterBubble = (riskPayload) => {
+  if (!chatLog || !riskPayload || typeof riskPayload !== "object") {
+    return;
+  }
+
+  const scoreRaw = Number(riskPayload.risk_score);
+  if (!Number.isFinite(scoreRaw)) {
+    return;
+  }
+
+  const score = Math.max(0, Math.min(100, Math.round(scoreRaw)));
+  const level = (riskPayload.risk_level || getRiskLevelClass(score)).toString().toUpperCase();
+  const bandClass = getRiskLevelClass(score);
+  const line = document.createElement("div");
+  line.className = "chat-message bot";
+
+  const riskLabel = `Flood risk: ${score}/100 (${level})`;
+  const peakText =
+    riskPayload.expected_peak_in_hours !== null && riskPayload.expected_peak_in_hours !== undefined
+      ? `Peak expected in ${riskPayload.expected_peak_in_hours}h`
+      : "";
+
+  const bubble = document.createElement("div");
+  bubble.className = "chat-bubble chat-risk-meter";
+  bubble.innerHTML = `
+    <div class="chat-risk-meter-header">
+      <span>${riskLabel}</span>
+      <span class="chat-risk-level risk-${bandClass.toLowerCase()}">${level}</span>
+    </div>
+    <div class="chat-risk-track" role="presentation">
+      <span class="chat-risk-fill risk-${bandClass.toLowerCase()}" style="width:${score}%"></span>
+    </div>
+    <span class="chat-meta">${peakText || "Forecast window up to selected hours."}</span>
+  `;
+
+  line.appendChild(bubble);
+  chatLog.appendChild(line);
+  chatLog.scrollTop = chatLog.scrollHeight;
+};
+
 async function submitChat(event, messageOverride) {
   if (event) {
     event.preventDefault();
@@ -943,7 +1092,8 @@ async function submitChat(event, messageOverride) {
 
   appendChat("You", message);
   chatHistory.push({ role: "user", content: message });
-  chatSendBtn.disabled = true;
+  setChatBusy(true);
+  addChatLoadingBubble();
 
   const payload = {
     message,
@@ -955,21 +1105,23 @@ async function submitChat(event, messageOverride) {
   };
 
   if (demoWeatherToggle?.checked) {
+    let baselineRainfall = [];
     try {
-      payload.demo_rainfall = parseDemoRainfallValues(demoRainfallInput?.value);
+      baselineRainfall = parseDemoRainfallValues(demoRainfallInput?.value);
+      payload.demo_rainfall = baselineRainfall;
       payload.demo_upstream_rainfall = parseDemoUpstreamWeather(
-        demoUpstreamWeatherInput?.value
+        demoUpstreamWeatherInput?.value,
+        baselineRainfall
       );
     } catch (error) {
       addStatusFlag(error.message || "Invalid demo rainfall values.", "error");
-      chatSendBtn.disabled = false;
+      removeChatLoadingBubble();
+      setChatBusy(false);
       return;
     }
     if (Array.isArray(payload.demo_upstream_rainfall) && payload.demo_upstream_rainfall.length === 0) {
       delete payload.demo_upstream_rainfall;
     }
-  } else {
-    payload.demo_rainfall = [];
   }
 
   try {
@@ -983,12 +1135,15 @@ async function submitChat(event, messageOverride) {
 
     const data = await response.json();
     if (!response.ok) {
+      removeChatLoadingBubble();
       appendChat("BahaWatch", data.error || "Chat request failed.");
       return;
     }
 
     const botReply = data.reply || "No response returned.";
+    removeChatLoadingBubble();
     appendChat("BahaWatch", botReply);
+    appendRiskMeterBubble(extractRiskResultFromChatResponse(data));
     chatHistory.push({ role: "assistant", content: botReply });
 
     if (data.map_payload && mapEnabled) {
@@ -1003,12 +1158,74 @@ async function submitChat(event, messageOverride) {
       addStatusFlag("Map visuals are unavailable in this session. I still provided the text answer above.", "warn");
     }
   } catch (error) {
+    removeChatLoadingBubble();
     appendChat("BahaWatch", "I couldn't reach the chat service just now. Please try again in a moment.");
   } finally {
-    chatSendBtn.disabled = false;
+    setChatBusy(false);
     chatInput.focus();
   }
 }
+
+function shuffleChatSuggestions() {
+  if (!chatSuggestions) {
+    return;
+  }
+
+  const chips = Array.from(chatSuggestions.children).filter((child) =>
+    child.classList.contains("chat-suggestion")
+  );
+  for (let i = chips.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [chips[i], chips[j]] = [chips[j], chips[i]];
+  }
+
+  chips.forEach((chip) => chatSuggestions.appendChild(chip));
+}
+
+const setChatBusy = (isBusy) => {
+  if (chatInput) {
+    chatInput.disabled = isBusy;
+  }
+
+  if (chatSendBtn) {
+    chatSendBtn.disabled = isBusy;
+  }
+
+  if (chatSuggestions) {
+    const suggestionButtons = chatSuggestions.querySelectorAll(".chat-suggestion");
+    suggestionButtons.forEach((button) => {
+      button.disabled = isBusy;
+    });
+  }
+};
+
+const addChatLoadingBubble = (text = "Checking flood data...") => {
+  if (!chatLog || chatLoadingBubble) {
+    return;
+  }
+
+  const line = document.createElement("div");
+  line.className = "chat-message bot";
+
+  const bubble = document.createElement("div");
+  bubble.className = "chat-bubble chat-loading";
+  const safeText = typeof text === "string" ? text : "Checking flood data...";
+  bubble.innerHTML = `<span class="chat-meta">BahaWatch</span><br/><span>${safeText}<span class="chat-loading-spinner"></span></span>`;
+
+  line.appendChild(bubble);
+  chatLog.appendChild(line);
+  chatLoadingBubble = line;
+  chatLog.scrollTop = chatLog.scrollHeight;
+};
+
+const removeChatLoadingBubble = () => {
+  if (!chatLoadingBubble || !chatLog) {
+    return;
+  }
+
+  chatLog.removeChild(chatLoadingBubble);
+  chatLoadingBubble = null;
+};
 
 function renderRiskMarker(payload) {
   clearRouteOverlays();
