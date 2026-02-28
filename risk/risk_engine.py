@@ -71,7 +71,7 @@ def load_river_union() -> object | None:
 
 
 def _load_river_points_fallback() -> list[tuple[float, float]]:
-    candidate_paths = [RIVER_SAMPLE_POINTS_PATH, RISK_DATA_DIR / "river_points.json"]
+    candidate_paths = [RIVER_SAMPLE_POINTS_PATH]
     import json
 
     for points_path in candidate_paths:
