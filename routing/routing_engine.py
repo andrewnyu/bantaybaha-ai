@@ -114,14 +114,30 @@ def compute_safe_route(
     dest_lat: float,
     dest_lng: float,
     safety_weight: float = DEFAULT_SAFETY_WEIGHT,
+    hours: int = 3,
+    weather_mode: str = "live",
+    reference_time: str | int | float | None = None,
 ) -> dict:
+    safe_hours = int(clamp(hours, 1, 6))
     graph = load_graph()
     origin_node = nearest_node_id(graph, origin_lat, origin_lng)
     dest_node = nearest_node_id(graph, dest_lat, dest_lng)
 
     local_graph = extract_local_graph(graph, origin_node, dest_node)
-    rainfall_sample = get_forecast_rainfall_sum_mm(origin_lat, origin_lng, 3)
-    upstream_summary = compute_upstream_rain_index(origin_lat, origin_lng, horizon_hours=3)
+    rainfall_sample = get_forecast_rainfall_sum_mm(
+        origin_lat,
+        origin_lng,
+        safe_hours,
+        weather_mode=weather_mode,
+        reference_time=reference_time,
+    )
+    upstream_summary = compute_upstream_rain_index(
+        lat=origin_lat,
+        lng=origin_lng,
+        horizon_hours=safe_hours,
+        weather_mode=weather_mode,
+        reference_time=reference_time,
+    )
 
     add_edge_hazard_scores(
         local_graph,

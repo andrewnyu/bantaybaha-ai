@@ -111,8 +111,20 @@ def _load_river_proxy_points_from_graph(limit: int = 320) -> list[tuple[float, f
     return points
 
 
-def get_forecast_rainfall_sum_mm(lat: float, lng: float, hours: int) -> float:
-    return get_hourly_rain_sum(lat=lat, lng=lng, hours=max(1, min(6, int(hours))))
+def get_forecast_rainfall_sum_mm(
+    lat: float,
+    lng: float,
+    hours: int,
+    weather_mode: str = "live",
+    reference_time: str | int | float | None = None,
+) -> float:
+    return get_hourly_rain_sum(
+        lat=lat,
+        lng=lng,
+        hours=max(1, min(6, int(hours))),
+        weather_mode=weather_mode,
+        reference_time=reference_time,
+    )
 
 
 def _simulate_elevation_m(lat: float, lng: float) -> float:
@@ -226,17 +238,35 @@ def classify_risk(score: int) -> str:
     return "LOW"
 
 
-def estimate_flood_risk(lat: float, lng: float, hours: int = 3) -> dict:
+def estimate_flood_risk(
+    lat: float,
+    lng: float,
+    hours: int = 3,
+    weather_mode: str = "live",
+    reference_time: str | int | float | None = None,
+) -> dict:
     safe_hours = int(clamp(hours, 1, 6))
 
-    local_rain_3h = get_forecast_rainfall_sum_mm(lat, lng, safe_hours)
+    local_rain_3h = get_forecast_rainfall_sum_mm(
+        lat=lat,
+        lng=lng,
+        hours=safe_hours,
+        weather_mode=weather_mode,
+        reference_time=reference_time,
+    )
     elevation_m = get_elevation_meters(lat, lng, allow_remote_lookup=True)
     elev_factor = elevation_factor(elevation_m)
     river_distance = distance_to_nearest_river_km(lat, lng)
     river_factor = river_proximity_factor(river_distance)
     hist_factor, in_flood_zone = historical_flood_factor(lat, lng)
 
-    upstream = compute_upstream_rain_index(lat, lng, horizon_hours=safe_hours)
+    upstream = compute_upstream_rain_index(
+        lat,
+        lng,
+        horizon_hours=safe_hours,
+        weather_mode=weather_mode,
+        reference_time=reference_time,
+    )
     upstream_norm = upstream["upstream_rain_index_norm"]
 
     raw_score = (

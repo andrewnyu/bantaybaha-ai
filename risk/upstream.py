@@ -58,7 +58,13 @@ def _travel_distance_to_max(horizon_hours: int) -> float:
     return safe_hours * 3600 * FLOW_SPEED_MPS
 
 
-def compute_upstream_rain_index(lat: float, lng: float, horizon_hours: int = 6) -> dict:
+def compute_upstream_rain_index(
+    lat: float,
+    lng: float,
+    horizon_hours: int = 6,
+    weather_mode: str = "live",
+    reference_time: str | int | float | None = None,
+) -> dict:
     horizon_hours = int(clamp(horizon_hours, 1, 6))
     river_graph = _load_river_graph()
     if river_graph is None or river_graph.number_of_nodes() == 0:
@@ -100,7 +106,13 @@ def compute_upstream_rain_index(lat: float, lng: float, horizon_hours: int = 6) 
         if node_lat is None or node_lng is None:
             continue
 
-        rain_total = get_hourly_rain_sum(node_lat, node_lng, horizon_hours)
+        rain_total = get_hourly_rain_sum(
+            node_lat,
+            node_lng,
+            horizon_hours,
+            weather_mode=weather_mode,
+            reference_time=reference_time,
+        )
         distance = float(distance_m)
         weight = math.exp(-distance / DECAY_DISTANCE_M)
         weighted_signal = rain_total * weight
