@@ -1,19 +1,33 @@
 import json
 from pathlib import Path
+import sys
 
 import geopandas as gpd
 import networkx as nx
 import osmnx as ox
 from shapely.geometry import LineString, MultiLineString
 
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 from core.geo import haversine_km
 from risk.risk_engine import get_elevation_meters
 
-BASE_DIR = Path(__file__).resolve().parents[1]
+BASE_DIR = ROOT_DIR
 NEGROS_PLACE = "Negros Island, Philippines"
 RIVER_SOURCE_PATH = BASE_DIR / "data" / "negros_rivers.geojson"
 RIVER_GRAPH_PATH = BASE_DIR / "data" / "negros_river_graph.gpickle"
 SAMPLE_POINTS_PATH = BASE_DIR / "data" / "river_sample_points.json"
+
+
+def _query_waterways(place_name: str) -> gpd.GeoDataFrame:
+    fetcher = getattr(ox, "geometries_from_place", None) or getattr(
+        ox, "features_from_place", None
+    )
+    if fetcher is None:
+        raise AttributeError("OSMnx does not expose geometries/features query function.")
+    return fetcher(place_name, tags={"waterway": ["river", "stream", "canal"]})
 
 
 def _load_river_geometries() -> gpd.GeoDataFrame:
@@ -22,10 +36,10 @@ def _load_river_geometries() -> gpd.GeoDataFrame:
 
     ox.settings.log_console = False
     print("No local river file found. Pulling waterways from OSM...")
-    return ox.geometries_from_place(
-        NEGROS_PLACE,
-        tags={"waterway": ["river", "stream", "canal"]},
-    )
+    try:
+        return _query_waterways(NEGROS_PLACE)
+    except Exception:
+        return gpd.GeoDataFrame({"geometry": []}, crs="EPSG:4326")
 
 
 def _node_id(lat: float, lng: float) -> str:
